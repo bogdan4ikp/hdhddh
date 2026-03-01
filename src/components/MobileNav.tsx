@@ -20,17 +20,7 @@ export default function MobileNav() {
         return (
           <button 
             key={id}
-            onClick={() => {
-              if (id === 'search') {
-                setView('home');
-                setTimeout(() => {
-                  const searchInput = document.getElementById('search-input');
-                  if (searchInput) searchInput.focus();
-                }, 100);
-              } else {
-                setView(id);
-              }
-            }}
+            onClick={() => setView(id)}
             className={`flex flex-col items-center justify-center w-full h-full gap-1 ${isActive ? (theme === 'light' ? 'text-black' : 'text-white') : 'text-neutral-400 hover:text-neutral-300'}`}
           >
             <Icon className="w-6 h-6" strokeWidth={isActive ? 2.5 : 2} />

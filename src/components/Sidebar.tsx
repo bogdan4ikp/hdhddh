@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Compass, User, Mic2, PlusSquare, Heart, Music2 } from 'lucide-react';
+import { Home, Compass, User, Mic2, PlusSquare, Heart, Music2, Search } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 
 export default function Sidebar() {
@@ -7,6 +7,7 @@ export default function Sidebar() {
 
   const navItems = [
     { id: 'home', icon: Home, label: 'Главная' },
+    { id: 'search', icon: Search, label: 'Поиск' },
     { id: 'recommendations', icon: Compass, label: 'Рекомендации' },
     { id: 'profile', icon: User, label: 'Профиль' },
   ];

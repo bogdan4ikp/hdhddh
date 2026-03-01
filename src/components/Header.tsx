@@ -3,16 +3,19 @@ import { Search, Bell, User } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 
 export default function Header() {
-  const { setView } = useAppContext();
+  const { setView, searchQuery, setSearchQuery, theme } = useAppContext();
   
   return (
-    <header className="h-16 flex items-center justify-between px-4 md:px-8 z-20 sticky top-0 bg-[#121212]/90 backdrop-blur-md">
+    <header className={`h-16 flex items-center justify-between px-4 md:px-8 z-20 sticky top-0 ${theme === 'light' ? 'bg-white/90 border-black/5' : 'bg-[#121212]/90 border-white/5'} backdrop-blur-md border-b transition-colors`}>
       <div className="relative w-full max-w-md mr-4">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
         <input 
           type="text" 
           placeholder="Поиск треков, артистов..." 
-          className="w-full bg-[#2a2a2a] border-none rounded-full py-2 pl-10 pr-4 text-sm text-white placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-white transition-all"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onFocus={() => setView('search')}
+          className={`w-full ${theme === 'light' ? 'bg-black/5 text-black placeholder-neutral-500' : 'bg-[#2a2a2a] text-white placeholder-neutral-400'} border-none rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 ${theme === 'light' ? 'focus:ring-black/10' : 'focus:ring-white/20'} transition-all`}
         />
       </div>
       <div className="flex items-center gap-3 md:gap-4">

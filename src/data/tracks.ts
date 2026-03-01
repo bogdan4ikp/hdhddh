@@ -14,6 +14,11 @@ const AUDIO_URLS = [
   'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
   'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3',
   'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3',
+  'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3',
+  'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3',
+  'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',
+  'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',
+  'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3',
 ];
 
 export const MOCK_TRACKS: Track[] = Array.from({ length: 100 }).map((_, i) => ({

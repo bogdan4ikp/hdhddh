@@ -1,9 +1,10 @@
 import React, { useRef, useState } from 'react';
 import { Settings, LogOut, Camera, Upload, Plus, Music, Trash2, Mic2 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import { deleteTrackFromDB } from '../utils/audioDb';
 
 export default function Profile() {
-  const { user, logout, allTracks, setView, refreshUser, refreshTracks, refreshPlaylists, theme, setTheme, accentColor, setAccentColor } = useAppContext();
+  const { user, logout, allTracks, setView, refreshUser, refreshTracks, refreshPlaylists, theme, setTheme, accentColor, setAccentColor, playTrack, currentTrack, isPlaying, togglePlay } = useAppContext();
   const [isEditing, setIsEditing] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   
@@ -42,19 +43,16 @@ export default function Profile() {
     reader.readAsDataURL(file);
   };
 
-  const handleDeleteTrack = (trackId: string) => {
+  const handleDeleteTrack = async (trackId: string) => {
     if (!confirm('Вы уверены, что хотите удалить этот трек? Это действие нельзя отменить.')) return;
     
-    // In a local-only app, we can't easily delete from the hardcoded MOCK_TRACKS
-    // But if we had a local state for "my tracks", we would filter it here.
-    // For now, let's just show a toast or log it.
-    console.log('Deleting track locally:', trackId);
-    
-    // If we were using a local array in AppContext for "customTracks", we would remove it there.
-    // Since we are using MOCK_TRACKS which is static, we can't really "delete" them permanently without a real backend or complex local state.
-    // However, we can simulate it by updating a "deletedTracks" list in localStorage if we wanted to be fancy.
-    
-    alert('В демо-режиме удаление треков симулируется.');
+    try {
+      await deleteTrackFromDB(trackId);
+      refreshTracks();
+      refreshUser();
+    } catch (e) {
+      console.error("Failed to delete track", e);
+    }
   };
 
   return (
@@ -204,13 +202,16 @@ export default function Profile() {
 
           {userTracks.length > 0 ? (
             <div className="grid grid-cols-1 gap-2">
-              {userTracks.map((track, i) => (
+              {userTracks.map((track, i) => {
+                const isActive = currentTrack?.id === track.id;
+                return (
                 <div 
                   key={track.id}
-                  className={`flex items-center gap-4 p-3 rounded-xl hover:bg-black/5 transition-colors group cursor-pointer`}
+                  onClick={() => isActive ? togglePlay() : playTrack(track)}
+                  className={`flex items-center gap-4 p-3 rounded-xl hover:bg-black/5 transition-colors group cursor-pointer ${isActive ? 'bg-black/5' : ''}`}
                 >
-                  <span className="text-neutral-500 w-6 text-center font-mono text-sm">{i + 1}</span>
-                  <div className="w-12 h-12 bg-neutral-800 rounded-lg overflow-hidden">
+                  <span className={`w-6 text-center font-mono text-sm ${isActive ? 'text-purple-500' : 'text-neutral-500'}`}>{i + 1}</span>
+                  <div className="w-12 h-12 bg-neutral-800 rounded-lg overflow-hidden relative">
                     {track.cover ? (
                       <img src={track.cover} alt="" className="w-full h-full object-cover" />
                     ) : (
@@ -218,9 +219,14 @@ export default function Profile() {
                         <Music className="w-5 h-5 text-neutral-500" />
                       </div>
                     )}
+                    {isActive && isPlaying && (
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                        <div className="w-3 h-3 bg-purple-500 rounded-full animate-pulse" />
+                      </div>
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className={`font-medium truncate ${theme === 'light' ? 'text-black' : 'text-white'}`}>{track.title}</h3>
+                    <h3 className={`font-medium truncate ${isActive ? 'text-purple-500' : 'text-white'}`}>{track.title}</h3>
                     <p className="text-neutral-400 text-sm truncate">{track.artist}</p>
                   </div>
                   <button 
@@ -234,7 +240,7 @@ export default function Profile() {
                     <Trash2 className="w-5 h-5" />
                   </button>
                 </div>
-              ))}
+              )})}
             </div>
           ) : (
             <div className={`text-center py-12 border-2 border-dashed ${theme === 'light' ? 'border-black/10' : 'border-neutral-800'} rounded-2xl`}>

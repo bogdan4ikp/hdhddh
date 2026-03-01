@@ -1,95 +1,116 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Music, CheckCircle2, Clock, AlertCircle, Plus, Trash2, ShieldCheck, Zap, Play } from 'lucide-react';
-import { useAppContext, Track } from '../context/AppContext';
+import { Upload, Music, CheckCircle2, Clock, AlertCircle, Plus, Trash2, ShieldCheck, Zap, Play, ListMusic } from 'lucide-react';
+import { useAppContext, Track, Playlist } from '../context/AppContext';
 import { motion, AnimatePresence } from 'motion/react';
+import { saveTrackToDB, deleteTrackFromDB } from '../utils/audioDb';
 
 export default function Studio() {
-  const { user, refreshTracks, refreshUser, allTracks } = useAppContext();
+  const { user, refreshTracks, refreshUser, allTracks, playlists, refreshPlaylists } = useAppContext();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
-  const [trackFile, setTrackFile] = useState<File | null>(null);
+  const [trackFiles, setTrackFiles] = useState<File[]>([]);
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [isExplicit, setIsExplicit] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [releaseType, setReleaseType] = useState<'single' | 'album'>('single');
 
   const userTracks = allTracks.filter(t => t.uploaderId === user?.id);
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !trackFile || !title) return;
+    if (!user || trackFiles.length === 0 || !title) return;
 
     setIsUploading(true);
     setUploadProgress(10);
 
-    // Simulate upload process
-    setTimeout(() => {
-      setUploadProgress(50);
-      
+    const coverDataUrl = await new Promise<string | null>((resolve) => {
+      if (!coverFile) return resolve(null);
       const reader = new FileReader();
-      reader.onloadend = () => {
-        const coverReader = new FileReader();
-        const finalizeUpload = (coverDataUrl: string | null) => {
-           const newTrack: Track = {
-            id: 'track-' + Date.now(),
-            title: title,
-            artist: artist || user.username,
-            cover: coverDataUrl || '',
-            url: URL.createObjectURL(trackFile), // This will only work for the current session, but good enough for demo
-            uploaderId: user.id,
-            plays: 0,
-            isExplicit: isExplicit,
-            status: 'pending',
-            uploadedAt: new Date().toISOString()
-          };
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.readAsDataURL(coverFile);
+    });
 
-          // In a real app, we'd add this to a "customTracks" list in AppContext/localStorage
-          // For now, we can't easily append to the static MOCK_TRACKS imported in AppContext
-          // But we can try to hack it into localStorage if we modify AppContext to look there.
-          
-          // Let's assume AppContext merges MOCK_TRACKS with localStorage['customTracks']
-          const existingCustomTracks = JSON.parse(localStorage.getItem('customTracks') || '[]');
-          const updatedCustomTracks = [...existingCustomTracks, newTrack];
-          localStorage.setItem('customTracks', JSON.stringify(updatedCustomTracks));
+    setUploadProgress(30);
 
-          setUploadProgress(100);
-          setStatusMessage({ type: 'success', text: 'Трек загружен локально!' });
-          setTitle('');
-          setArtist('');
-          setTrackFile(null);
-          setCoverFile(null);
-          setIsExplicit(false);
-          refreshTracks(); // This needs to be updated in AppContext to read customTracks
-          refreshUser();
-          
-          setIsUploading(false);
-          setUploadProgress(0);
+    try {
+      const uploadedTrackIds: string[] = [];
+
+      for (let i = 0; i < trackFiles.length; i++) {
+        const file = trackFiles[i];
+        const trackId = 'track-' + Date.now() + '-' + i;
+        
+        const newTrack: Track = {
+          id: trackId,
+          title: releaseType === 'album' ? file.name.replace(/\.[^/.]+$/, "") : title,
+          artist: artist || user.username,
+          cover: coverDataUrl || '',
+          url: '', 
+          uploaderId: user.id,
+          plays: 0,
+          isExplicit: isExplicit,
+          status: 'approved',
+          uploadedAt: new Date().toISOString(),
+          fileBlob: file
         };
 
-        if (coverFile) {
-          coverReader.onloadend = () => finalizeUpload(coverReader.result as string);
-          coverReader.readAsDataURL(coverFile);
-        } else {
-          finalizeUpload(null);
-        }
-      };
+        await saveTrackToDB(newTrack);
+        uploadedTrackIds.push(trackId);
+        setUploadProgress(30 + Math.floor((i + 1) / trackFiles.length * 50));
+      }
+
+      // If it's an album/playlist, create a playlist wrapper
+      if (releaseType === 'album' && uploadedTrackIds.length > 0) {
+        const newPlaylist: Playlist = {
+          id: 'playlist-' + Date.now(),
+          title: title,
+          authorId: user.id,
+          cover: coverDataUrl,
+          isPublic: true,
+          tracks: uploadedTrackIds,
+          createdAt: new Date().toISOString(),
+          type: 'album'
+        };
+        const updatedPlaylists = [...playlists, newPlaylist];
+        localStorage.setItem('playlists', JSON.stringify(updatedPlaylists));
+        refreshPlaylists();
+      }
+
+      setUploadProgress(100);
+      setStatusMessage({ type: 'success', text: releaseType === 'album' ? 'Альбом успешно загружен!' : 'Трек успешно загружен!' });
+      setTitle('');
+      setArtist('');
+      setTrackFiles([]);
+      setCoverFile(null);
+      setIsExplicit(false);
+      refreshTracks(); 
+      refreshUser();
       
-      reader.readAsDataURL(trackFile);
-    }, 1500);
+      setTimeout(() => {
+        setIsUploading(false);
+        setUploadProgress(0);
+        setStatusMessage(null);
+      }, 3000);
+
+    } catch (e) {
+      console.error("Failed to save track", e);
+      setStatusMessage({ type: 'error', text: 'Ошибка сохранения' });
+      setIsUploading(false);
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!user) return;
     if (!confirm('Удалить этот трек?')) return;
 
-    // Remove from local storage custom tracks
-    const existingCustomTracks = JSON.parse(localStorage.getItem('customTracks') || '[]');
-    const updatedCustomTracks = existingCustomTracks.filter((t: Track) => t.id !== id);
-    localStorage.setItem('customTracks', JSON.stringify(updatedCustomTracks));
-    
-    refreshTracks();
-    refreshUser();
+    try {
+        await deleteTrackFromDB(id);
+        refreshTracks();
+        refreshUser();
+    } catch (e) {
+        console.error("Failed to delete track", e);
+    }
   };
 
   return (
@@ -140,14 +161,34 @@ export default function Studio() {
               </h2>
 
               <form onSubmit={handleUpload} className="space-y-6">
+                <div className="flex gap-4 p-1 bg-white/5 rounded-2xl border border-white/10 mb-6">
+                  <button
+                    type="button"
+                    onClick={() => setReleaseType('single')}
+                    className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${releaseType === 'single' ? 'bg-pink-500 text-white shadow-lg' : 'text-neutral-400 hover:text-white'}`}
+                  >
+                    Сингл
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReleaseType('album')}
+                    className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${releaseType === 'album' ? 'bg-pink-500 text-white shadow-lg' : 'text-neutral-400 hover:text-white'}`}
+                  >
+                    <ListMusic className="w-4 h-4" />
+                    Альбом / Плейлист
+                  </button>
+                </div>
+
                 <div>
-                  <label className="block text-xs font-black text-neutral-500 mb-2 uppercase tracking-[0.2em]">Название</label>
+                  <label className="block text-xs font-black text-neutral-500 mb-2 uppercase tracking-[0.2em]">
+                    {releaseType === 'album' ? 'Название альбома' : 'Название'}
+                  </label>
                   <input 
                     type="text" 
                     value={title}
                     onChange={e => setTitle(e.target.value)}
                     className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-pink-500/50 transition-all placeholder:text-neutral-600"
-                    placeholder="Название трека"
+                    placeholder={releaseType === 'album' ? 'Мой новый альбом' : 'Название трека'}
                     required
                   />
                 </div>
@@ -164,12 +205,12 @@ export default function Studio() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <label className={`flex flex-col items-center justify-center h-32 border-2 border-dashed rounded-3xl cursor-pointer transition-all ${trackFile ? 'border-pink-500 bg-pink-500/5' : 'border-white/10 hover:border-white/20 bg-white/5'}`}>
-                    <Music className={`w-6 h-6 mb-2 ${trackFile ? 'text-pink-500' : 'text-neutral-500'}`} />
+                  <label className={`flex flex-col items-center justify-center h-32 border-2 border-dashed rounded-3xl cursor-pointer transition-all ${trackFiles.length > 0 ? 'border-pink-500 bg-pink-500/5' : 'border-white/10 hover:border-white/20 bg-white/5'}`}>
+                    <Music className={`w-6 h-6 mb-2 ${trackFiles.length > 0 ? 'text-pink-500' : 'text-neutral-500'}`} />
                     <span className="text-[10px] font-black uppercase tracking-tighter text-center px-2 truncate w-full">
-                      {trackFile ? trackFile.name : 'Аудио'}
+                      {trackFiles.length > 0 ? `Выбрано: ${trackFiles.length}` : 'Аудио'}
                     </span>
-                    <input type="file" accept="audio/*" onChange={e => setTrackFile(e.target.files?.[0] || null)} className="hidden" />
+                    <input type="file" accept="audio/*" multiple={releaseType === 'album'} onChange={e => setTrackFiles(Array.from(e.target.files || []).slice(0, 30))} className="hidden" />
                   </label>
 
                   <label className={`flex flex-col items-center justify-center h-32 border-2 border-dashed rounded-3xl cursor-pointer transition-all overflow-hidden ${coverFile ? 'border-pink-500 bg-pink-500/5' : 'border-white/10 hover:border-white/20 bg-white/5'}`}>
@@ -200,9 +241,9 @@ export default function Studio() {
 
                 <button 
                   type="submit"
-                  disabled={isUploading || !trackFile || !title}
+                  disabled={isUploading || trackFiles.length === 0 || !title}
                   className={`w-full py-5 rounded-3xl font-black text-lg transition-all shadow-xl ${
-                    isUploading || !trackFile || !title 
+                    isUploading || trackFiles.length === 0 || !title 
                       ? 'bg-neutral-800 text-neutral-500 cursor-not-allowed' 
                       : 'bg-pink-600 text-white hover:bg-pink-500 hover:scale-[1.02] active:scale-95 shadow-pink-600/20'
                   }`}

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { MOCK_TRACKS } from '../data/tracks';
+import { getAllTracksFromDB, updateTrackInDB } from '../utils/audioDb';
 
 // Types
 export interface User {
@@ -9,6 +9,8 @@ export interface User {
   cover: string | null;
   trackCount: number;
   likes?: string[];
+  minutesListened?: number;
+  tracksPlayed?: number;
 }
 
 export interface Track {
@@ -22,6 +24,7 @@ export interface Track {
   uploadedAt?: string;
   isExplicit?: boolean;
   status?: 'pending' | 'approved' | 'rejected';
+  fileBlob?: Blob; // Added for IndexedDB storage
 }
 
 export interface Playlist {
@@ -32,6 +35,7 @@ export interface Playlist {
   isPublic: boolean;
   tracks: string[];
   createdAt: string;
+  type?: 'playlist' | 'album';
 }
 
 interface AppContextType {
@@ -50,6 +54,9 @@ interface AppContextType {
   setVolume: (vol: number) => void;
   isPlayerExpanded: boolean;
   setIsPlayerExpanded: (expanded: boolean) => void;
+  isMiniPlayerVisible: boolean;
+  setIsMiniPlayerVisible: (visible: boolean) => void;
+  closePlayer: () => void;
   
   // Auth & Data
   user: User | null;
@@ -66,6 +73,12 @@ interface AppContextType {
   refreshPlaylists: () => void;
   selectedArtistId: string | null;
   setSelectedArtistId: (id: string | null) => void;
+  selectedPlaylistId: string | null;
+  setSelectedPlaylistId: (id: string | null) => void;
+  
+  // Search State
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
   
   // Theme & Customization
   theme: 'dark' | 'light';
@@ -76,19 +89,6 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Convert MOCK_TRACKS to match the Track interface
-const INITIAL_TRACKS: Track[] = MOCK_TRACKS.map(t => ({
-  id: t.id.toString(),
-  title: t.title,
-  artist: t.artist,
-  cover: t.cover,
-  url: t.audioUrl,
-  uploaderId: 'system',
-  plays: parseInt(t.plays.replace(/\s/g, ''), 10) || 0,
-  isExplicit: Math.random() > 0.8,
-  status: 'approved'
-}));
-
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [currentView, setView] = useState('home');
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
@@ -97,19 +97,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
+  const [isMiniPlayerVisible, setIsMiniPlayerVisible] = useState(true);
   const [selectedArtistId, setSelectedArtistId] = useState<string | null>(null);
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   
   // Auth & Data State
   const [user, setUser] = useState<User | null>(null);
-  const [allTracks, setAllTracks] = useState<Track[]>(INITIAL_TRACKS);
+  // Initialize with empty array, will load custom tracks in useEffect
+  const [allTracks, setAllTracks] = useState<Track[]>([]);
   const [likedTracks, setLikedTracks] = useState<string[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [accentColor, setAccentColor] = useState<string>('pink');
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Refs for event listeners to access latest state
+  const userRef = useRef(user);
+  const allTracksRef = useRef(allTracks);
+  const currentTrackRef = useRef(currentTrack);
+  const isPlayingRef = useRef(isPlaying);
+  const playTrackRef = useRef<(track: Track) => void>(() => {});
 
-  // Initialize Audio
+  useEffect(() => {
+    userRef.current = user;
+    allTracksRef.current = allTracks;
+    currentTrackRef.current = currentTrack;
+    isPlayingRef.current = isPlaying;
+    playTrackRef.current = playTrack;
+  });
+
+  // Initialize Audio and Load Data
   useEffect(() => {
     audioRef.current = new Audio();
     audioRef.current.volume = volume;
@@ -118,17 +137,63 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
     const handleLoadedMetadata = () => setDuration(audio.duration);
-    const handleEnded = () => playNext();
+    
+    const playNextInternal = () => {
+      const tracks = allTracksRef.current;
+      const current = currentTrackRef.current;
+      if (!current || tracks.length === 0) return;
+      
+      const currentIndex = tracks.findIndex(t => t.id === current.id);
+      const nextIndex = (currentIndex + 1) % tracks.length;
+      if (playTrackRef.current) {
+        playTrackRef.current(tracks[nextIndex]);
+      }
+    };
+
+    const handleEnded = () => {
+      // Increment tracks played and minutes listened
+      const currentUser = userRef.current;
+      const currentTrack = currentTrackRef.current;
+      if (currentUser && audioRef.current) {
+        // Calculate minutes played (using track duration or actual played time if we tracked it)
+        // For simplicity, we add the full track duration in minutes
+        const minutesToAdd = audioRef.current.duration / 60;
+        
+        const updatedUser = { 
+          ...currentUser, 
+          tracksPlayed: (currentUser.tracksPlayed || 0) + 1,
+          minutesListened: Math.round((currentUser.minutesListened || 0) + minutesToAdd)
+        };
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+      }
+      playNextInternal();
+    };
+
+    const handleError = (e: Event) => {
+      console.error("Audio playback error:", audio.error);
+      // If error occurs, try to play next track to avoid stuck state
+      setTimeout(() => {
+        if (isPlayingRef.current) {
+          playNextInternal();
+        }
+      }, 1000);
+    };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
     audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('error', handleError);
 
     // Check for saved user
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
       try {
         const parsedUser = JSON.parse(savedUser);
+        // Ensure stats exist
+        if (parsedUser.minutesListened === undefined) parsedUser.minutesListened = 0;
+        if (parsedUser.tracksPlayed === undefined) parsedUser.tracksPlayed = 0;
+        
         setUser(parsedUser);
         if (parsedUser.likes) {
           setLikedTracks(parsedUser.likes);
@@ -155,50 +220,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // Load custom tracks
-    const savedCustomTracks = localStorage.getItem('customTracks');
-    if (savedCustomTracks) {
+    // Load custom tracks from IndexedDB
+    const loadTracks = async () => {
       try {
-        const customTracks = JSON.parse(savedCustomTracks);
-        setAllTracks([...INITIAL_TRACKS, ...customTracks]);
+        const tracks = await getAllTracksFromDB();
+        const processedTracks = tracks.map(t => {
+            if (t.fileBlob) {
+                return { ...t, url: URL.createObjectURL(t.fileBlob) };
+            }
+            return t;
+        });
+        setAllTracks(processedTracks);
       } catch (e) {
-        console.error("Failed to parse custom tracks", e);
+        console.error("Failed to load tracks from DB", e);
       }
-    } else {
-      setAllTracks(INITIAL_TRACKS);
-    }
+    };
+    loadTracks();
+
+    // Clear old localStorage customTracks to avoid conflicts/errors
+    localStorage.removeItem('customTracks');
 
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
       audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('error', handleError);
+      audio.pause();
+      audioRef.current = null;
     };
   }, []);
 
-  const refreshPlaylists = () => {
-    const savedPlaylists = localStorage.getItem('playlists');
-    if (savedPlaylists) {
+  const refreshTracks = async () => {
       try {
-        setPlaylists(JSON.parse(savedPlaylists));
+        const tracks = await getAllTracksFromDB();
+        const processedTracks = tracks.map(t => {
+            if (t.fileBlob) {
+                return { ...t, url: URL.createObjectURL(t.fileBlob) };
+            }
+            return t;
+        });
+        setAllTracks(processedTracks);
       } catch (e) {
-        console.error("Failed to parse playlists", e);
+        console.error("Failed to load tracks from DB", e);
       }
-    }
-  };
-
-  const refreshTracks = () => {
-    const savedCustomTracks = localStorage.getItem('customTracks');
-    if (savedCustomTracks) {
-      try {
-        const customTracks = JSON.parse(savedCustomTracks);
-        setAllTracks([...INITIAL_TRACKS, ...customTracks]);
-      } catch (e) {
-        console.error("Failed to parse custom tracks", e);
-        setAllTracks(INITIAL_TRACKS);
-      }
-    } else {
-      setAllTracks(INITIAL_TRACKS);
-    }
   };
 
   const refreshUser = () => {
@@ -209,6 +273,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setUser(parsedUser);
       if (parsedUser.likes) {
         setLikedTracks(parsedUser.likes);
+      }
+    }
+  };
+
+  const refreshPlaylists = () => {
+    const savedPlaylists = localStorage.getItem('playlists');
+    if (savedPlaylists) {
+      try {
+        setPlaylists(JSON.parse(savedPlaylists));
+      } catch (e) {
+        console.error("Failed to parse playlists", e);
       }
     }
   };
@@ -238,11 +313,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (currentTrack && audioRef.current) {
       const audio = audioRef.current;
+      
+      if (!currentTrack.url) {
+        console.error("Track has no URL:", currentTrack);
+        setIsPlaying(false);
+        return;
+      }
+
       // Check if the current src ends with the track url to handle absolute vs relative paths
-      const isSameTrack = audio.src.endsWith(currentTrack.url);
+      const isSameTrack = audio.src === currentTrack.url || audio.src.endsWith(currentTrack.url);
       
       if (!isSameTrack) {
         audio.src = currentTrack.url;
+        audio.load(); // Explicitly load the new source
       }
       
       if (isPlaying) {
@@ -251,6 +334,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           playPromise.catch(e => {
             if (e.name !== 'AbortError') {
               console.error("Play error", e);
+              // If play fails immediately (e.g. no supported source), try next track
+              if (e.message.includes('no supported source')) {
+                 setTimeout(() => {
+                    if (isPlayingRef.current) {
+                      const tracks = allTracksRef.current;
+                      const current = currentTrackRef.current;
+                      if (!current || tracks.length === 0) return;
+                      
+                      const currentIndex = tracks.findIndex(t => t.id === current.id);
+                      const nextIndex = (currentIndex + 1) % tracks.length;
+                      if (playTrackRef.current) {
+                        playTrackRef.current(tracks[nextIndex]);
+                      }
+                    }
+                 }, 1000);
+              }
             }
           });
         }
@@ -269,8 +368,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const playTrack = async (track: Track) => {
-    setCurrentTrack(track);
+    // Increment plays
+    const updatedTrack = { ...track, plays: (track.plays || 0) + 1 };
+    
+    // Update locally
+    setAllTracks(prev => prev.map(t => t.id === track.id ? updatedTrack : t));
+    
+    // Update in DB if it's a user uploaded track
+    if (track.uploaderId !== 'system') {
+      try {
+        await updateTrackInDB(updatedTrack);
+      } catch (e) {
+        console.error("Failed to update track plays in DB", e);
+      }
+    }
+
+    // Update user stats
+    if (user) {
+      const updatedUser = {
+        ...user,
+        tracksPlayed: (user.tracksPlayed || 0) + 1,
+        minutesListened: (user.minutesListened || 0) + 3 // Assuming 3 mins per track for now
+      };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+    }
+
+    setCurrentTrack(updatedTrack);
     setIsPlaying(true);
+    setIsMiniPlayerVisible(true);
+  };
+
+  const closePlayer = () => {
+    setIsPlaying(false);
+    setIsMiniPlayerVisible(false);
   };
 
   const playNext = () => {
@@ -296,7 +427,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const login = (userData: User) => {
     // Simulate login by saving to local storage
-    const userWithLikes = { ...userData, likes: userData.likes || [] };
+    const userWithLikes = { 
+      ...userData, 
+      likes: userData.likes || [],
+      minutesListened: userData.minutesListened || 0,
+      tracksPlayed: userData.tracksPlayed || 0
+    };
     setUser(userWithLikes);
     setLikedTracks(userWithLikes.likes || []);
     localStorage.setItem('user', JSON.stringify(userWithLikes));
@@ -329,11 +465,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       currentTrack, isPlaying, togglePlay, playTrack, playNext, playPrev,
       currentTime, duration, seek,
       volume, setVolume,
-      isPlayerExpanded, setIsPlayerExpanded,
+      isPlayerExpanded, setIsPlayerExpanded, 
+      isMiniPlayerVisible, setIsMiniPlayerVisible, closePlayer,
       user, login, logout, allTracks, refreshTracks, refreshUser,
       likedTracks, toggleLike,
       playlists, refreshPlaylists,
       selectedArtistId, setSelectedArtistId,
+      selectedPlaylistId, setSelectedPlaylistId,
+      searchQuery, setSearchQuery,
       theme, setTheme,
       accentColor, setAccentColor
     }}>
