@@ -14,27 +14,18 @@ export default function Auth() {
   const [checkingUsername, setCheckingUsername] = useState(false);
 
   useEffect(() => {
+    // Simulate username check locally
     if (username.length < 3) {
       setIsAvailable(null);
       return;
     }
 
-    const timer = setTimeout(async () => {
+    const timer = setTimeout(() => {
       setCheckingUsername(true);
-      try {
-        const res = await fetch(`/api/check-user/${username}`);
-        const data = await res.json();
-        // If we are logging in, we want it to exist. If registering, we want it NOT to exist.
-        if (isLogin) {
-          setIsAvailable(data.exists);
-        } else {
-          setIsAvailable(!data.exists);
-        }
-      } catch (err) {
-        console.error('Error checking username:', err);
-      } finally {
-        setCheckingUsername(false);
-      }
+      // In a real local-only app, we might check against a list of users in localStorage
+      // For now, we'll just say it's available if it's not empty
+      setIsAvailable(true);
+      setCheckingUsername(false);
     }, 500);
 
     return () => clearTimeout(timer);
@@ -42,39 +33,24 @@ export default function Auth() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isLogin && isAvailable === false) {
-      setError('Этот никнейм уже занят');
-      return;
-    }
-    if (isLogin && isAvailable === false) {
-      setError('Пользователь не найден');
-      return;
-    }
-
+    
     setError('');
     setLoading(true);
 
-    const endpoint = isLogin ? '/api/login' : '/api/register';
-
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Something went wrong');
-      }
-
-      login(data);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
+    // Simulate network delay
+    setTimeout(() => {
+      const mockUser = {
+        id: 'user-' + Date.now(),
+        username: username,
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
+        cover: null,
+        trackCount: 0,
+        likes: []
+      };
+      
+      login(mockUser);
       setLoading(false);
-    }
+    }, 1000);
   };
 
   return (

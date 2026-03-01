@@ -23,40 +23,38 @@ export default function Profile() {
 
   const userTracks = allTracks.filter(t => t.uploaderId === user.id);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'avatar' | 'cover') => {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'avatar' | 'cover') => {
     if (!e.target.files || !e.target.files[0]) return;
     
-    const formData = new FormData();
-    formData.append(type, e.target.files[0]);
+    const file = e.target.files[0];
+    const reader = new FileReader();
 
-    try {
-      const res = await fetch(`/api/users/${user.id}/update`, {
-        method: 'POST',
-        body: formData
-      });
-      if (res.ok) {
-        refreshUser();
-      }
-    } catch (err) {
-      console.error('Failed to upload image', err);
-    }
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      
+      // Update user locally
+      const updatedUser = { ...user, [type]: base64String };
+      // In a real app we'd call a context method to update user, but for now we can hack it via localStorage + refresh
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      refreshUser();
+    };
+
+    reader.readAsDataURL(file);
   };
 
-  const handleDeleteTrack = async (trackId: string) => {
+  const handleDeleteTrack = (trackId: string) => {
     if (!confirm('Вы уверены, что хотите удалить этот трек? Это действие нельзя отменить.')) return;
     
-    try {
-      const res = await fetch(`/api/tracks/${trackId}?userId=${user.id}`, {
-        method: 'DELETE'
-      });
-      if (res.ok) {
-        refreshTracks();
-        refreshUser();
-        refreshPlaylists();
-      }
-    } catch (err) {
-      console.error('Failed to delete track', err);
-    }
+    // In a local-only app, we can't easily delete from the hardcoded MOCK_TRACKS
+    // But if we had a local state for "my tracks", we would filter it here.
+    // For now, let's just show a toast or log it.
+    console.log('Deleting track locally:', trackId);
+    
+    // If we were using a local array in AppContext for "customTracks", we would remove it there.
+    // Since we are using MOCK_TRACKS which is static, we can't really "delete" them permanently without a real backend or complex local state.
+    // However, we can simulate it by updating a "deletedTracks" list in localStorage if we wanted to be fancy.
+    
+    alert('В демо-режиме удаление треков симулируется.');
   };
 
   return (

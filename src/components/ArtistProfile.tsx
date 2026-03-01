@@ -10,31 +10,33 @@ export default function ArtistProfile({ artistId, onBack }: { artistId: string, 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchArtistData = async () => {
+    const fetchArtistData = () => {
       setLoading(true);
-      try {
-        const [userRes, tracksRes] = await Promise.all([
-          fetch(`/api/users/${artistId}`),
-          fetch(`/api/users/${artistId}/tracks`)
-        ]);
+      // Simulate fetching artist data locally
+      // In a real app we'd look up the user by ID from a list of users
+      // Here we'll just mock it based on the ID or find it in allTracks if it's an uploader
+      
+      const foundTracks = allTracks.filter(t => t.uploaderId === artistId || t.artist === artistId);
+      
+      // If we found tracks, we can infer the artist name from the first track
+      const artistName = foundTracks.length > 0 ? foundTracks[0].artist : 'Unknown Artist';
+      
+      const mockArtist: User = {
+        id: artistId,
+        username: artistName,
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${artistId}`,
+        cover: null,
+        trackCount: foundTracks.length,
+        likes: []
+      };
 
-        if (userRes.ok) {
-          const userData = await userRes.json();
-          setArtist(userData);
-        }
-        if (tracksRes.ok) {
-          const tracksData = await tracksRes.json();
-          setArtistTracks(tracksData);
-        }
-      } catch (err) {
-        console.error('Failed to fetch artist data', err);
-      } finally {
-        setLoading(false);
-      }
+      setArtist(mockArtist);
+      setArtistTracks(foundTracks);
+      setLoading(false);
     };
 
     fetchArtistData();
-  }, [artistId]);
+  }, [artistId, allTracks]);
 
   if (loading) {
     return (

@@ -11,41 +11,38 @@ export default function Library() {
 
   const userPlaylists = playlists.filter(p => p.authorId === user?.id);
 
-  const handleCreatePlaylist = async (e: React.FormEvent) => {
+  const handleCreatePlaylist = (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !newTitle) return;
 
-    const formData = new FormData();
-    formData.append('title', newTitle);
-    formData.append('authorId', user.id);
-    formData.append('isPublic', isPublic.toString());
-    formData.append('tracks', JSON.stringify(selectedTracks));
+    const newPlaylist: Playlist = {
+      id: 'playlist-' + Date.now(),
+      title: newTitle,
+      authorId: user.id,
+      cover: null, // In a real app we'd generate a cover collage
+      isPublic: isPublic,
+      tracks: selectedTracks,
+      createdAt: new Date().toISOString()
+    };
 
-    try {
-      const res = await fetch('/api/playlists', {
-        method: 'POST',
-        body: formData
-      });
-      if (res.ok) {
-        setIsCreating(false);
-        setNewTitle('');
-        setSelectedTracks([]);
-        refreshPlaylists();
-      }
-    } catch (error) {
-      console.error('Failed to create playlist', error);
-    }
+    const updatedPlaylists = [...playlists, newPlaylist];
+    // Update context state (we need to expose setPlaylists in context or just rely on refresh)
+    // Since we can't easily access setPlaylists directly from here without exposing it, 
+    // we'll update localStorage and call refreshPlaylists which reads from it.
+    localStorage.setItem('playlists', JSON.stringify(updatedPlaylists));
+    
+    setIsCreating(false);
+    setNewTitle('');
+    setSelectedTracks([]);
+    refreshPlaylists();
   };
 
-  const handleDeletePlaylist = async (id: string) => {
-    try {
-      const res = await fetch(`/api/playlists/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        refreshPlaylists();
-      }
-    } catch (error) {
-      console.error('Failed to delete playlist', error);
-    }
+  const handleDeletePlaylist = (id: string) => {
+    if (!confirm('Удалить плейлист?')) return;
+    
+    const updatedPlaylists = playlists.filter(p => p.id !== id);
+    localStorage.setItem('playlists', JSON.stringify(updatedPlaylists));
+    refreshPlaylists();
   };
 
   const toggleTrackSelection = (trackId: string) => {

@@ -23,57 +23,73 @@ export default function Studio() {
     setIsUploading(true);
     setUploadProgress(10);
 
-    const formData = new FormData();
-    formData.append('title', title);
-    formData.append('artist', artist || user.username);
-    formData.append('userId', user.id);
-    formData.append('track', trackFile);
-    formData.append('isExplicit', isExplicit.toString());
-    if (coverFile) formData.append('cover', coverFile);
+    // Simulate upload process
+    setTimeout(() => {
+      setUploadProgress(50);
+      
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const coverReader = new FileReader();
+        const finalizeUpload = (coverDataUrl: string | null) => {
+           const newTrack: Track = {
+            id: 'track-' + Date.now(),
+            title: title,
+            artist: artist || user.username,
+            cover: coverDataUrl || '',
+            url: URL.createObjectURL(trackFile), // This will only work for the current session, but good enough for demo
+            uploaderId: user.id,
+            plays: 0,
+            isExplicit: isExplicit,
+            status: 'pending',
+            uploadedAt: new Date().toISOString()
+          };
 
-    try {
-      setUploadProgress(40);
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData
-      });
+          // In a real app, we'd add this to a "customTracks" list in AppContext/localStorage
+          // For now, we can't easily append to the static MOCK_TRACKS imported in AppContext
+          // But we can try to hack it into localStorage if we modify AppContext to look there.
+          
+          // Let's assume AppContext merges MOCK_TRACKS with localStorage['customTracks']
+          const existingCustomTracks = JSON.parse(localStorage.getItem('customTracks') || '[]');
+          const updatedCustomTracks = [...existingCustomTracks, newTrack];
+          localStorage.setItem('customTracks', JSON.stringify(updatedCustomTracks));
 
-      if (res.ok) {
-        setUploadProgress(100);
-        setStatusMessage({ type: 'success', text: 'Трек загружен и отправлен на проверку (1-2 мин)' });
-        setTitle('');
-        setArtist('');
-        setTrackFile(null);
-        setCoverFile(null);
-        setIsExplicit(false);
-        refreshTracks();
-        refreshUser();
-      } else {
-        setStatusMessage({ type: 'error', text: 'Ошибка при загрузке' });
-      }
-    } catch (error) {
-      setStatusMessage({ type: 'error', text: 'Ошибка сети' });
-    } finally {
-      setTimeout(() => {
-        setIsUploading(false);
-        setUploadProgress(0);
-      }, 1000);
-    }
+          setUploadProgress(100);
+          setStatusMessage({ type: 'success', text: 'Трек загружен локально!' });
+          setTitle('');
+          setArtist('');
+          setTrackFile(null);
+          setCoverFile(null);
+          setIsExplicit(false);
+          refreshTracks(); // This needs to be updated in AppContext to read customTracks
+          refreshUser();
+          
+          setIsUploading(false);
+          setUploadProgress(0);
+        };
+
+        if (coverFile) {
+          coverReader.onloadend = () => finalizeUpload(coverReader.result as string);
+          coverReader.readAsDataURL(coverFile);
+        } else {
+          finalizeUpload(null);
+        }
+      };
+      
+      reader.readAsDataURL(trackFile);
+    }, 1500);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     if (!user) return;
     if (!confirm('Удалить этот трек?')) return;
 
-    try {
-      const res = await fetch(`/api/tracks/${id}?userId=${user.id}`, { method: 'DELETE' });
-      if (res.ok) {
-        refreshTracks();
-        refreshUser();
-      }
-    } catch (error) {
-      console.error('Failed to delete track', error);
-    }
+    // Remove from local storage custom tracks
+    const existingCustomTracks = JSON.parse(localStorage.getItem('customTracks') || '[]');
+    const updatedCustomTracks = existingCustomTracks.filter((t: Track) => t.id !== id);
+    localStorage.setItem('customTracks', JSON.stringify(updatedCustomTracks));
+    
+    refreshTracks();
+    refreshUser();
   };
 
   return (

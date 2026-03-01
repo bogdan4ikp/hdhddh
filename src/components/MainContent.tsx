@@ -25,21 +25,20 @@ export default function MainContent() {
   };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [trendsRes, recsRes] = await Promise.all([
-          fetch('/api/trends'),
-          user ? fetch(`/api/recommendations/${user.id}`) : Promise.resolve(null)
-        ]);
-
-        if (trendsRes.ok) setTrends(await trendsRes.json());
-        if (recsRes && recsRes.ok) setRecommendations(await recsRes.json());
-      } catch (e) {
-        console.error('Failed to fetch dashboard data', e);
-      }
+    // Simulate fetching data locally
+    const fetchData = () => {
+      // Mock trends: just take first 5 tracks
+      setTrends(allTracks.slice(0, 5));
+      
+      // Mock recommendations: random tracks
+      const shuffled = [...allTracks].sort(() => 0.5 - Math.random());
+      setRecommendations(shuffled.slice(0, 5));
     };
-    fetchData();
-  }, [user]);
+    
+    if (allTracks.length > 0) {
+      fetchData();
+    }
+  }, [allTracks, user]);
 
   const handlePlayWave = () => {
     // Filter tracks to get full track objects for liked tracks

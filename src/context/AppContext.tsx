@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { MOCK_TRACKS } from '../data/tracks';
 
 // Types
 export interface User {
@@ -75,6 +76,19 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+// Convert MOCK_TRACKS to match the Track interface
+const INITIAL_TRACKS: Track[] = MOCK_TRACKS.map(t => ({
+  id: t.id.toString(),
+  title: t.title,
+  artist: t.artist,
+  cover: t.cover,
+  url: t.audioUrl,
+  uploaderId: 'system',
+  plays: parseInt(t.plays.replace(/\s/g, ''), 10) || 0,
+  isExplicit: Math.random() > 0.8,
+  status: 'approved'
+}));
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [currentView, setView] = useState('home');
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
@@ -87,7 +101,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   
   // Auth & Data State
   const [user, setUser] = useState<User | null>(null);
-  const [allTracks, setAllTracks] = useState<Track[]>([]);
+  const [allTracks, setAllTracks] = useState<Track[]>(INITIAL_TRACKS);
   const [likedTracks, setLikedTracks] = useState<string[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -113,10 +127,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // Check for saved user
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
-      const parsedUser = JSON.parse(savedUser);
-      setUser(parsedUser);
-      if (parsedUser.likes) {
-        setLikedTracks(parsedUser.likes);
+      try {
+        const parsedUser = JSON.parse(savedUser);
+        setUser(parsedUser);
+        if (parsedUser.likes) {
+          setLikedTracks(parsedUser.likes);
+        }
+      } catch (e) {
+        console.error("Failed to parse saved user", e);
+        localStorage.removeItem('user');
       }
     }
 
@@ -126,8 +145,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const savedAccent = localStorage.getItem('accentColor');
     if (savedAccent) setAccentColor(savedAccent);
 
-    refreshTracks();
-    refreshPlaylists();
+    // Load local playlists if any
+    const savedPlaylists = localStorage.getItem('playlists');
+    if (savedPlaylists) {
+      try {
+        setPlaylists(JSON.parse(savedPlaylists));
+      } catch (e) {
+        console.error("Failed to parse playlists", e);
+      }
+    }
+
+    // Load custom tracks
+    const savedCustomTracks = localStorage.getItem('customTracks');
+    if (savedCustomTracks) {
+      try {
+        const customTracks = JSON.parse(savedCustomTracks);
+        setAllTracks([...INITIAL_TRACKS, ...customTracks]);
+      } catch (e) {
+        console.error("Failed to parse custom tracks", e);
+      }
+    } else {
+      setAllTracks(INITIAL_TRACKS);
+    }
 
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
@@ -136,75 +175,58 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const refreshPlaylists = async () => {
-    try {
-      const res = await fetch('/api/playlists');
-      if (res.ok) {
-        const data = await res.json();
-        setPlaylists(data);
+  const refreshPlaylists = () => {
+    const savedPlaylists = localStorage.getItem('playlists');
+    if (savedPlaylists) {
+      try {
+        setPlaylists(JSON.parse(savedPlaylists));
+      } catch (e) {
+        console.error("Failed to parse playlists", e);
       }
-    } catch (error) {
-      console.error('Failed to fetch playlists', error);
     }
   };
 
-  const refreshTracks = async () => {
-    try {
-      const res = await fetch('/api/tracks');
-      if (res.ok) {
-        const data = await res.json();
-        setAllTracks(data);
+  const refreshTracks = () => {
+    const savedCustomTracks = localStorage.getItem('customTracks');
+    if (savedCustomTracks) {
+      try {
+        const customTracks = JSON.parse(savedCustomTracks);
+        setAllTracks([...INITIAL_TRACKS, ...customTracks]);
+      } catch (e) {
+        console.error("Failed to parse custom tracks", e);
+        setAllTracks(INITIAL_TRACKS);
       }
-    } catch (error) {
-      console.error('Failed to fetch tracks', error);
+    } else {
+      setAllTracks(INITIAL_TRACKS);
     }
   };
 
-  const refreshUser = async () => {
+  const refreshUser = () => {
     if (!user) return;
-    try {
-      const res = await fetch(`/api/users/${user.id}`);
-      if (res.ok) {
-        const updatedUser = await res.json();
-        setUser(updatedUser);
-        if (updatedUser.likes) {
-          setLikedTracks(updatedUser.likes);
-        }
-        localStorage.setItem('user', JSON.stringify(updatedUser));
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      const parsedUser = JSON.parse(savedUser);
+      setUser(parsedUser);
+      if (parsedUser.likes) {
+        setLikedTracks(parsedUser.likes);
       }
-    } catch (error) {
-      console.error('Failed to refresh user', error);
     }
   };
 
   const toggleLike = async (trackId: string) => {
     if (!user) return;
-    try {
-      // Optimistic update
-      setLikedTracks(prev => 
-        prev.includes(trackId) ? prev.filter(id => id !== trackId) : [...prev, trackId]
-      );
+    
+    // Optimistic update
+    const newLikedTracks = likedTracks.includes(trackId) 
+      ? likedTracks.filter(id => id !== trackId) 
+      : [...likedTracks, trackId];
+    
+    setLikedTracks(newLikedTracks);
 
-      const res = await fetch(`/api/users/${user.id}/like`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trackId })
-      });
-      
-      if (res.ok) {
-        const data = await res.json();
-        setLikedTracks(data.likes);
-        
-        // Update user object in local storage
-        const updatedUser = { ...user, likes: data.likes };
-        setUser(updatedUser);
-        localStorage.setItem('user', JSON.stringify(updatedUser));
-      }
-    } catch (error) {
-      console.error('Failed to toggle like', error);
-      // Revert optimistic update
-      refreshUser();
-    }
+    // Update user object in local storage
+    const updatedUser = { ...user, likes: newLikedTracks };
+    setUser(updatedUser);
+    localStorage.setItem('user', JSON.stringify(updatedUser));
   };
 
   useEffect(() => {
@@ -249,13 +271,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const playTrack = async (track: Track) => {
     setCurrentTrack(track);
     setIsPlaying(true);
-    
-    // Increment play count
-    try {
-      await fetch(`/api/tracks/${track.id}/play`, { method: 'POST' });
-    } catch (e) {
-      console.error('Failed to increment play count', e);
-    }
   };
 
   const playNext = () => {
@@ -280,11 +295,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const login = (userData: User) => {
-    setUser(userData);
-    if (userData.likes) {
-      setLikedTracks(userData.likes);
-    }
-    localStorage.setItem('user', JSON.stringify(userData));
+    // Simulate login by saving to local storage
+    const userWithLikes = { ...userData, likes: userData.likes || [] };
+    setUser(userWithLikes);
+    setLikedTracks(userWithLikes.likes || []);
+    localStorage.setItem('user', JSON.stringify(userWithLikes));
     setView('home');
   };
 
