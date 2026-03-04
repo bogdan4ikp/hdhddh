@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Music, ArrowRight, Loader2 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { motion } from 'motion/react';
+import { db } from '../services/db';
 
 export default function Auth() {
   const { login } = useAppContext();
@@ -19,22 +20,15 @@ export default function Auth() {
     setError('');
     
     try {
-      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-      
-      const data = await res.json();
-      
-      if (res.ok) {
-        login(data);
+      let userData;
+      if (isLogin) {
+        userData = await db.login(username, password);
       } else {
-        setError(data.error || 'Произошла ошибка');
+        userData = await db.register(username, password);
       }
-    } catch (err) {
-      setError('Ошибка сети. Попробуйте позже.');
+      login(userData);
+    } catch (err: any) {
+      setError(err.message || 'Произошла ошибка');
     } finally {
       setLoading(false);
     }

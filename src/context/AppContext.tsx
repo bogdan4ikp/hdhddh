@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { db } from '../services/db';
 
 // Types
 export interface User {
@@ -136,11 +137,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const refreshTracks = async () => {
     try {
-      const res = await fetch('/api/tracks');
-      if (res.ok) {
-        const data = await res.json();
-        setAllTracks(data);
-      }
+      const tracks = await db.getTracks();
+      setAllTracks(tracks);
     } catch (e) {
       console.error('Failed to fetch tracks', e);
     }
@@ -148,11 +146,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const refreshPlaylists = async () => {
     try {
-      const res = await fetch('/api/playlists');
-      if (res.ok) {
-        const data = await res.json();
-        setPlaylists(data);
-      }
+      const playlists = await db.getPlaylists();
+      setPlaylists(playlists);
     } catch (e) {
       console.error('Failed to fetch playlists', e);
     }
@@ -162,12 +157,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const currentUser = userRef.current;
     if (!currentUser) return;
     try {
-      const res = await fetch(`/api/users/${currentUser.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data);
-        setLikedTracks(data.likes || []);
-        localStorage.setItem('user', JSON.stringify(data));
+      const userData = await db.getUser(currentUser.id);
+      if (userData) {
+        setUser(userData);
+        setLikedTracks(userData.likes || []);
+        localStorage.setItem('user', JSON.stringify(userData));
       }
     } catch (e) {
       console.error('Failed to fetch user', e);
@@ -297,15 +291,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // Set timer to count as a view after 5 seconds
     playTimerRef.current = setTimeout(async () => {
       try {
-        await fetch(`/api/tracks/${track.id}/play`, { method: 'POST' });
+        await db.incrementPlayCount(track.id);
         refreshTracks();
         
         if (userRef.current) {
-          await fetch(`/api/users/${userRef.current.id}/stats`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tracksPlayed: 1, minutesListened: 3 })
-          });
+          await db.updateUserStats(userRef.current.id, { tracksPlayed: 1, minutesListened: 3 });
           refreshUser();
         }
       } catch (e) {
@@ -363,14 +353,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const toggleLike = async (trackId: string) => {
     if (!user) return;
     try {
-      const res = await fetch('/api/likes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, trackId })
-      });
-      if (res.ok) {
-        refreshUser();
-      }
+      await db.toggleLike(user.id, trackId);
+      refreshUser();
     } catch (e) {
       console.error('Failed to toggle like', e);
     }

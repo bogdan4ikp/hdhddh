@@ -10,6 +10,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, AreaChart, Area
 } from 'recharts';
 import { isFutureRelease } from '../utils/date';
+import { db, readFileAsBase64 } from '../services/db';
 
 interface TrackUploadData {
   file: File;
@@ -110,53 +111,62 @@ export default function Studio() {
     setUploadStatus('idle');
     setUploadProgress(10);
 
-    const formData = new FormData();
-    formData.append('title', title);
-    formData.append('artist', user.username);
-    formData.append('uploaderId', user.id);
-    formData.append('isExplicit', isExplicit.toString());
-    formData.append('releaseType', releaseType);
-    if (releaseDate) formData.append('releaseDate', releaseDate);
-
-    if (coverFile) {
-      formData.append('cover', coverFile);
-    }
-
-    tracksData.forEach((trackData, index) => {
-      formData.append(`audio_${index}`, trackData.file);
-      formData.append(`title_${index}`, trackData.title);
-      formData.append(`lyrics_${index}`, trackData.lyrics);
-      if (trackData.coverFile) {
-        formData.append(`cover_${index}`, trackData.coverFile);
-      }
-    });
-
     try {
-      setUploadProgress(50);
-      const res = await fetch('/api/tracks', {
-        method: 'POST',
-        body: formData
-      });
-
-      if (res.ok) {
-        setUploadProgress(100);
-        setUploadStatus('success');
-        refreshTracks();
-        refreshPlaylists();
-        refreshUser();
-        
-        setTimeout(() => {
-          setTitle('');
-          setTracksData([]);
-          setCoverFile(null);
-          setReleaseDate('');
-          setUploadStatus('idle');
-          setUploadProgress(0);
-          setActiveTab('content');
-        }, 2000);
+      // Convert main cover to base64
+      let mainCoverBase64 = '';
+      if (coverFile) {
+        mainCoverBase64 = await readFileAsBase64(coverFile);
       } else {
-        throw new Error('Upload failed');
+        // Default cover
+        mainCoverBase64 = `https://picsum.photos/seed/${title}/500/500`;
       }
+
+      setUploadProgress(30);
+
+      // Process each track
+      for (let i = 0; i < tracksData.length; i++) {
+        const trackData = tracksData[i];
+        
+        // Read audio file
+        const audioBase64 = await readFileAsBase64(trackData.file);
+        
+        // Read track cover if exists, else use main cover
+        let trackCoverBase64 = mainCoverBase64;
+        if (trackData.coverFile) {
+          trackCoverBase64 = await readFileAsBase64(trackData.coverFile);
+        }
+
+        await db.uploadTrack({
+          title: trackData.title || title,
+          artist: user.username,
+          cover: trackCoverBase64,
+          url: audioBase64,
+          uploaderId: user.id,
+          isExplicit: isExplicit,
+          lyrics: trackData.lyrics,
+          releaseDate: releaseDate || undefined,
+          status: 'approved' // Auto-approve for local demo
+        });
+
+        setUploadProgress(30 + ((i + 1) / tracksData.length) * 60);
+      }
+
+      setUploadProgress(100);
+      setUploadStatus('success');
+      refreshTracks();
+      refreshPlaylists();
+      refreshUser();
+      
+      setTimeout(() => {
+        setTitle('');
+        setTracksData([]);
+        setCoverFile(null);
+        setReleaseDate('');
+        setUploadStatus('idle');
+        setUploadProgress(0);
+        setActiveTab('content');
+      }, 2000);
+
     } catch (error) {
       console.error("Upload error:", error);
       setUploadStatus('error');
