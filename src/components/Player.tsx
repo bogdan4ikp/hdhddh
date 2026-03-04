@@ -16,12 +16,27 @@ export default function Player() {
     currentTrack, isPlaying, togglePlay, playNext, playPrev, 
     currentTime, duration, seek, volume, setVolume,
     isPlayerExpanded, setIsPlayerExpanded, setSelectedArtistId, theme,
-    toggleLike, likedTracks, closePlayer, isMiniPlayerVisible, setIsMiniPlayerVisible
+    toggleLike, likedTracks, closePlayer, isMiniPlayerVisible, setIsMiniPlayerVisible,
+    repeatMode, setRepeatMode
   } = useAppContext();
   
   const [isShuffle, setIsShuffle] = useState(false);
-  const [isRepeat, setIsRepeat] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isLiking, setIsLiking] = useState(false);
+
+  const handleLikeClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsLiking(true);
+    await toggleLike(currentTrack?.id || '');
+    setTimeout(() => setIsLiking(false), 500);
+  };
+
+  const toggleRepeat = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (repeatMode === 'off') setRepeatMode('all');
+    else if (repeatMode === 'all') setRepeatMode('one');
+    else setRepeatMode('off');
+  };
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
@@ -129,10 +144,23 @@ export default function Player() {
             {/* Controls */}
             <div className="flex items-center gap-3 relative z-10">
               <button 
-                onClick={(e) => { e.stopPropagation(); if(currentTrack) toggleLike(currentTrack.id); }}
-                className="p-3 text-neutral-400 hover:text-pink-500 transition-colors rounded-full hover:bg-white/5"
+                onClick={handleLikeClick}
+                className="p-3 text-neutral-400 hover:text-pink-500 transition-colors rounded-full hover:bg-white/5 relative"
               >
-                <Heart className={`w-6 h-6 ${currentTrack && likedTracks.includes(currentTrack.id) ? 'fill-pink-500 text-pink-500' : ''}`} />
+                <AnimatePresence>
+                  {isLiking && (
+                    <motion.div
+                      initial={{ scale: 1, opacity: 1 }}
+                      animate={{ scale: 2.5, opacity: 0 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.5, ease: "easeOut" }}
+                      className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                    >
+                      <Heart className="w-6 h-6 text-pink-500 fill-pink-500" />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                <Heart className={`w-6 h-6 transition-all ${currentTrack && likedTracks.includes(currentTrack.id) ? 'fill-pink-500 text-pink-500 scale-110' : ''}`} />
               </button>
               
               <button 

@@ -1,7 +1,8 @@
 import React from 'react';
-import { Play, Heart, Music, ArrowLeft, Trash2 } from 'lucide-react';
+import { Play, Heart, Music, ArrowLeft, Trash2, Clock } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { motion } from 'motion/react';
+import { isFutureRelease } from '../utils/date';
 
 export default function PlaylistView() {
   const { 
@@ -40,13 +41,18 @@ export default function PlaylistView() {
     }
   };
 
-  const handleDeletePlaylist = () => {
+  const handleDeletePlaylist = async () => {
     if (!confirm('Удалить этот ' + (playlist.type === 'album' ? 'альбом' : 'плейлист') + '?')) return;
     
-    const updatedPlaylists = playlists.filter(p => p.id !== playlist.id);
-    localStorage.setItem('playlists', JSON.stringify(updatedPlaylists));
-    refreshPlaylists();
-    setView('library');
+    try {
+      const res = await fetch(`/api/playlists/${playlist.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        refreshPlaylists();
+        setView('library');
+      }
+    } catch (e) {
+      console.error('Failed to delete playlist', e);
+    }
   };
 
   return (
@@ -78,9 +84,17 @@ export default function PlaylistView() {
             )}
           </div>
           <div className="flex-1 min-w-0 pb-2">
-            <p className="text-xs font-bold uppercase tracking-widest text-pink-500 mb-2">
-              {playlist.type === 'album' ? 'Альбом' : 'Плейлист'}
-            </p>
+            <div className="flex items-center gap-2 mb-2">
+              <p className="text-xs font-bold uppercase tracking-widest text-pink-500">
+                {playlist.type === 'album' ? 'Альбом' : 'Плейлист'}
+              </p>
+              {isFutureRelease(playlist.releaseDate) && (
+                <span className="text-[10px] font-bold text-white uppercase tracking-wider bg-pink-500/80 px-2 py-0.5 rounded-full border border-pink-500/20 shadow-lg flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  Скоро
+                </span>
+              )}
+            </div>
             <h1 className="text-4xl md:text-6xl font-black text-white mb-4 truncate tracking-tighter">
               {playlist.title}
             </h1>
@@ -97,8 +111,8 @@ export default function PlaylistView() {
           <div className="flex items-center gap-4">
             <button 
               onClick={handlePlayAll}
-              disabled={playlistTracks.length === 0}
-              className="w-14 h-14 bg-pink-500 text-white rounded-full flex items-center justify-center hover:scale-105 transition-transform shadow-lg shadow-pink-900/20 disabled:opacity-50 disabled:hover:scale-100"
+              disabled={playlistTracks.length === 0 || isFutureRelease(playlist.releaseDate)}
+              className="w-14 h-14 bg-pink-500 text-white rounded-full flex items-center justify-center hover:scale-105 transition-transform shadow-lg shadow-pink-900/20 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
             >
               <Play className="w-6 h-6 fill-current ml-1" />
             </button>
@@ -122,13 +136,18 @@ export default function PlaylistView() {
             return (
               <div 
                 key={track.id} 
-                onClick={() => isActive ? togglePlay() : playTrack(track)}
+                onClick={() => {
+                  if (isFutureRelease(track.releaseDate)) return;
+                  isActive ? togglePlay() : playTrack(track)
+                }}
                 className={`group flex items-center gap-4 p-3 rounded-xl transition-all cursor-pointer border border-transparent ${
                   isActive ? 'bg-white/10 border-white/5' : 'hover:bg-white/5 hover:border-white/5'
-                }`}
+                } ${isFutureRelease(track.releaseDate) ? 'opacity-50 cursor-not-allowed hover:bg-transparent hover:border-transparent' : ''}`}
               >
                 <div className="w-8 text-center text-neutral-500 font-mono text-sm">
-                  {isActive && isPlaying ? (
+                  {isFutureRelease(track.releaseDate) ? (
+                    <Clock className="w-4 h-4 mx-auto text-neutral-500" />
+                  ) : isActive && isPlaying ? (
                     <div className="flex items-end justify-center gap-0.5 h-4">
                       <div className="w-1 bg-pink-500 h-full animate-[bounce_1s_infinite]"></div>
                       <div className="w-1 bg-pink-500 h-2/3 animate-[bounce_1s_infinite_0.2s]"></div>
@@ -137,7 +156,9 @@ export default function PlaylistView() {
                   ) : (
                     <span className="group-hover:hidden">{i + 1}</span>
                   )}
-                  <Play className={`w-4 h-4 mx-auto hidden ${isActive ? '' : 'group-hover:block'} text-white fill-current`} />
+                  {!isFutureRelease(track.releaseDate) && (
+                    <Play className={`w-4 h-4 mx-auto hidden ${isActive ? '' : 'group-hover:block'} text-white fill-current`} />
+                  )}
                 </div>
 
                 <div className="w-12 h-12 bg-neutral-800 rounded-lg flex-shrink-0 overflow-hidden relative shadow-md">
@@ -167,16 +188,23 @@ export default function PlaylistView() {
                   </motion.button>
                   {user?.id === playlist.authorId && (
                     <button 
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         e.stopPropagation();
                         if (!confirm('Удалить трек из ' + (playlist.type === 'album' ? 'альбома' : 'плейлиста') + '?')) return;
-                        const updatedPlaylist = {
-                          ...playlist,
-                          tracks: playlist.tracks.filter(id => id !== track.id)
-                        };
-                        const updatedPlaylists = playlists.map(p => p.id === playlist.id ? updatedPlaylist : p);
-                        localStorage.setItem('playlists', JSON.stringify(updatedPlaylists));
-                        refreshPlaylists();
+                        
+                        const updatedTracks = playlist.tracks.filter(id => id !== track.id);
+                        try {
+                          const res = await fetch(`/api/playlists/${playlist.id}/tracks`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ tracks: updatedTracks })
+                          });
+                          if (res.ok) {
+                            refreshPlaylists();
+                          }
+                        } catch (err) {
+                          console.error('Failed to remove track from playlist', err);
+                        }
                       }}
                       className="p-2 text-neutral-500 hover:text-red-500 hover:bg-white/10 rounded-full transition-colors opacity-0 group-hover:opacity-100"
                       title="Удалить из плейлиста"

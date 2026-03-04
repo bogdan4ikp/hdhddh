@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Play, Plus, Trash2, Heart } from 'lucide-react';
+import { Play, Plus, Trash2, Heart, Clock } from 'lucide-react';
 import { useAppContext, Playlist } from '../context/AppContext';
+import { isFutureRelease } from '../utils/date';
 
 export default function Library() {
   const { user, playlists, allTracks, playTrack, refreshPlaylists, setView, likedTracks, setSelectedPlaylistId } = useAppContext();
@@ -12,46 +13,50 @@ export default function Library() {
   const userPlaylists = playlists.filter(p => p.authorId === user?.id);
   const favoriteTracks = allTracks.filter(t => likedTracks.includes(t.id));
 
-  const handleCreatePlaylist = (e: React.FormEvent) => {
+  const handleCreatePlaylist = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !newTitle) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const newPlaylist: Playlist = {
-        id: 'playlist-' + Date.now(),
-        title: newTitle,
-        authorId: user.id,
-        cover: reader.result as string || null,
-        isPublic: false, // Always private
-        tracks: selectedTracks,
-        createdAt: new Date().toISOString(),
-        type: 'playlist'
-      };
-
-      const updatedPlaylists = [...playlists, newPlaylist];
-      localStorage.setItem('playlists', JSON.stringify(updatedPlaylists));
-      
-      setIsCreating(false);
-      setNewTitle('');
-      setSelectedTracks([]);
-      setCoverFile(null);
-      refreshPlaylists();
-    };
-
+    const formData = new FormData();
+    formData.append('title', newTitle);
+    formData.append('authorId', user.id);
+    formData.append('isPublic', 'false');
+    formData.append('type', 'playlist');
+    formData.append('tracks', JSON.stringify(selectedTracks));
+    
     if (coverFile) {
-      reader.readAsDataURL(coverFile);
-    } else {
-      reader.onloadend({ target: reader } as unknown as ProgressEvent<FileReader>);
+      formData.append('cover', coverFile);
+    }
+
+    try {
+      const res = await fetch('/api/playlists', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (res.ok) {
+        setIsCreating(false);
+        setNewTitle('');
+        setSelectedTracks([]);
+        setCoverFile(null);
+        refreshPlaylists();
+      }
+    } catch (e) {
+      console.error('Failed to create playlist', e);
     }
   };
 
-  const handleDeletePlaylist = (id: string) => {
+  const handleDeletePlaylist = async (id: string) => {
     if (!confirm('Удалить плейлист?')) return;
     
-    const updatedPlaylists = playlists.filter(p => p.id !== id);
-    localStorage.setItem('playlists', JSON.stringify(updatedPlaylists));
-    refreshPlaylists();
+    try {
+      const res = await fetch(`/api/playlists/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        refreshPlaylists();
+      }
+    } catch (e) {
+      console.error('Failed to delete playlist', e);
+    }
   };
 
   const toggleTrackSelection = (trackId: string) => {
@@ -186,17 +191,25 @@ export default function Library() {
                 </div>
               )}
               
+              {isFutureRelease(playlist.releaseDate) && (
+                <div className="absolute top-2 left-2 z-10 bg-pink-500/80 backdrop-blur-md px-2 py-1 rounded-lg border border-pink-500/20 flex items-center gap-1.5 shadow-lg">
+                  <Clock className="w-3 h-3 text-white" />
+                  <span className="text-[10px] font-bold text-white uppercase tracking-wider">Скоро</span>
+                </div>
+              )}
+
               <button 
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (isFutureRelease(playlist.releaseDate)) return;
                   if (playlist.tracks.length > 0) {
                     const firstTrack = allTracks.find(t => t.id === playlist.tracks[0]);
                     if (firstTrack) playTrack(firstTrack);
                   }
                 }}
-                className="absolute bottom-2 right-2 w-12 h-12 bg-green-500 rounded-full flex items-center justify-center text-black opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl hover:scale-105 hover:bg-green-400"
+                className={`absolute bottom-2 right-2 w-12 h-12 rounded-full flex items-center justify-center text-black opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl hover:scale-105 ${isFutureRelease(playlist.releaseDate) ? 'bg-neutral-600 cursor-not-allowed text-white' : 'bg-green-500 hover:bg-green-400'}`}
               >
-                <Play className="w-6 h-6 fill-black ml-1" />
+                <Play className={`w-6 h-6 ml-1 ${isFutureRelease(playlist.releaseDate) ? 'fill-white' : 'fill-black'}`} />
               </button>
             </div>
             

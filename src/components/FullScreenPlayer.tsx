@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { motion, PanInfo } from 'motion/react';
+import { motion, PanInfo, AnimatePresence } from 'motion/react';
 import { X, MoreHorizontal, ListMusic, MessageSquareQuote, Volume2, VolumeX, Shuffle, Repeat, Play, Pause, SkipBack, SkipForward, Heart, Share2, Music, ChevronDown } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 
@@ -14,16 +14,33 @@ export default function FullScreenPlayer() {
   const { 
     currentTrack, isPlaying, togglePlay, playNext, playPrev, 
     currentTime, duration, seek, volume, setVolume,
-    setIsPlayerExpanded, likedTracks, toggleLike, setSelectedArtistId, theme
+    setIsPlayerExpanded, likedTracks, toggleLike, setSelectedArtistId, theme,
+    repeatMode, setRepeatMode
   } = useAppContext();
 
   const [isDragging, setIsDragging] = useState(false);
+  const [isLiking, setIsLiking] = useState(false);
+  const [showLyrics, setShowLyrics] = useState(false);
 
   const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     setIsDragging(false);
     if (info.offset.y > 100) {
       setIsPlayerExpanded(false);
     }
+  };
+
+  const handleLikeClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsLiking(true);
+    await toggleLike(currentTrack?.id || '');
+    setTimeout(() => setIsLiking(false), 500);
+  };
+
+  const toggleRepeat = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (repeatMode === 'off') setRepeatMode('all');
+    else if (repeatMode === 'all') setRepeatMode('one');
+    else setRepeatMode('off');
   };
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
@@ -78,49 +95,78 @@ export default function FullScreenPlayer() {
         >
           <ChevronDown className="w-6 h-6 text-white" />
         </button>
-        <div className="text-xs font-bold tracking-widest uppercase opacity-70">Сейчас играет</div>
-        <button className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors">
-          <MoreHorizontal className="w-6 h-6 text-white" />
+        <div className="text-xs font-bold tracking-widest uppercase opacity-70">
+          {showLyrics ? 'Текст песни' : 'Сейчас играет'}
+        </div>
+        <button 
+          onClick={() => setShowLyrics(!showLyrics)}
+          className={`w-10 h-10 flex items-center justify-center rounded-full transition-colors ${showLyrics ? 'bg-pink-500 text-white' : 'hover:bg-white/10 text-white'}`}
+        >
+          <MessageSquareQuote className="w-5 h-5" />
         </button>
       </div>
 
       {/* Main Content */}
       <div className="relative z-10 flex-1 flex flex-col px-8 pb-12 overflow-y-auto no-scrollbar">
         
-        {/* Album Art */}
-        <div className="flex-1 flex items-center justify-center py-8 min-h-[300px]">
-          <motion.div 
-            className="w-full max-w-[350px] aspect-square rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden border border-white/10"
-            animate={{ scale: isPlaying ? 1 : 0.9 }}
-            transition={{ type: "spring", stiffness: 100, damping: 20 }}
-          >
-            {currentTrack ? (
-              <img src={currentTrack.cover} alt="Cover" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full bg-neutral-800 flex items-center justify-center">
-                <Music className="w-24 h-24 text-neutral-600" />
-              </div>
-            )}
-          </motion.div>
-        </div>
-
-        {/* Track Info & Like */}
-        <div className="mb-8 flex items-end justify-between">
-          <div className="flex-1 min-w-0 mr-4">
-            <h2 className="text-3xl font-black text-white truncate tracking-tight leading-tight mb-2">
-              {currentTrack?.title || 'Не проигрывается'}
-            </h2>
-            <p className="text-xl font-medium text-white/60 truncate">
-              {currentTrack?.artist || 'Неизвестный артист'}
-            </p>
+        {showLyrics ? (
+          <div className="flex-1 flex flex-col py-8 overflow-y-auto custom-scrollbar">
+            <h2 className="text-3xl font-black text-white mb-8">{currentTrack?.title}</h2>
+            <div className="text-xl leading-relaxed text-white/80 whitespace-pre-wrap font-medium">
+              {currentTrack?.lyrics ? currentTrack.lyrics : 'Текст песни не добавлен.'}
+            </div>
           </div>
-          <button 
-            onClick={(e) => { e.stopPropagation(); if(currentTrack) toggleLike(currentTrack.id); }}
-            className="p-3 rounded-full hover:bg-white/10 transition-colors active:scale-90"
-          >
-            <Heart className={`w-8 h-8 ${currentTrack && likedTracks.includes(currentTrack.id) ? 'text-pink-500 fill-pink-500' : 'text-white'}`} />
-          </button>
-        </div>
+        ) : (
+          <>
+            {/* Album Art */}
+            <div className="flex-1 flex items-center justify-center py-8 min-h-[300px]">
+              <motion.div 
+                className="w-full max-w-[350px] aspect-square rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden border border-white/10"
+                animate={{ scale: isPlaying ? 1 : 0.9 }}
+                transition={{ type: "spring", stiffness: 100, damping: 20 }}
+              >
+                {currentTrack ? (
+                  <img src={currentTrack.cover} alt="Cover" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-neutral-800 flex items-center justify-center">
+                    <Music className="w-24 h-24 text-neutral-600" />
+                  </div>
+                )}
+              </motion.div>
+            </div>
+
+            {/* Track Info & Like */}
+            <div className="mb-8 flex items-end justify-between">
+              <div className="flex-1 min-w-0 mr-4">
+                <h2 className="text-3xl font-black text-white truncate tracking-tight leading-tight mb-2">
+                  {currentTrack?.title || 'Не проигрывается'}
+                </h2>
+                <p className="text-xl font-medium text-white/60 truncate">
+                  {currentTrack?.artist || 'Неизвестный артист'}
+                </p>
+              </div>
+              <button 
+                onClick={handleLikeClick}
+                className="p-3 rounded-full hover:bg-white/10 transition-colors active:scale-90 relative"
+              >
+                <AnimatePresence>
+                  {isLiking && (
+                    <motion.div
+                      initial={{ scale: 1, opacity: 1 }}
+                      animate={{ scale: 2.5, opacity: 0 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.5, ease: "easeOut" }}
+                      className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                    >
+                      <Heart className="w-8 h-8 text-pink-500 fill-pink-500" />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                <Heart className={`w-8 h-8 transition-all ${currentTrack && likedTracks.includes(currentTrack.id) ? 'text-pink-500 fill-pink-500 scale-110' : 'text-white'}`} />
+              </button>
+            </div>
+          </>
+        )}
 
         {/* Progress Bar */}
         <div className="mb-10 group">
@@ -172,8 +218,14 @@ export default function FullScreenPlayer() {
             <SkipForward className="w-10 h-10 fill-current" />
           </button>
 
-          <button className="text-white/40 hover:text-white transition-colors">
+          <button 
+            onClick={toggleRepeat}
+            className={`transition-colors relative ${repeatMode !== 'off' ? 'text-pink-500' : 'text-white/40 hover:text-white'}`}
+          >
             <Repeat className="w-6 h-6" />
+            {repeatMode === 'one' && (
+              <span className="absolute -top-2 -right-2 text-[10px] font-bold bg-pink-500 text-white rounded-full w-4 h-4 flex items-center justify-center">1</span>
+            )}
           </button>
         </div>
 

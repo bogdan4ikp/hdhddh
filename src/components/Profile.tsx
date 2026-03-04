@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
-import { Settings, LogOut, Camera, Upload, Plus, Music, Trash2, Mic2 } from 'lucide-react';
+import { Settings, LogOut, Camera, Upload, Plus, Music, Trash2, Mic2, Clock } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { deleteTrackFromDB } from '../utils/audioDb';
+import { isFutureRelease } from '../utils/date';
 
 export default function Profile() {
   const { user, logout, allTracks, setView, refreshUser, refreshTracks, refreshPlaylists, theme, setTheme, accentColor, setAccentColor, playTrack, currentTrack, isPlaying, togglePlay } = useAppContext();
@@ -24,32 +24,36 @@ export default function Profile() {
 
   const userTracks = allTracks.filter(t => t.uploaderId === user.id);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'avatar' | 'cover') => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'avatar' | 'cover') => {
     if (!e.target.files || !e.target.files[0]) return;
     
     const file = e.target.files[0];
-    const reader = new FileReader();
+    const formData = new FormData();
+    formData.append(type, file);
 
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
+    try {
+      const res = await fetch(`/api/users/${user.id}/profile`, {
+        method: 'POST',
+        body: formData
+      });
       
-      // Update user locally
-      const updatedUser = { ...user, [type]: base64String };
-      // In a real app we'd call a context method to update user, but for now we can hack it via localStorage + refresh
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      refreshUser();
-    };
-
-    reader.readAsDataURL(file);
+      if (res.ok) {
+        refreshUser();
+      }
+    } catch (error) {
+      console.error('Failed to upload image', error);
+    }
   };
 
   const handleDeleteTrack = async (trackId: string) => {
     if (!confirm('Вы уверены, что хотите удалить этот трек? Это действие нельзя отменить.')) return;
     
     try {
-      await deleteTrackFromDB(trackId);
-      refreshTracks();
-      refreshUser();
+      const res = await fetch(`/api/tracks/${trackId}`, { method: 'DELETE' });
+      if (res.ok) {
+        refreshTracks();
+        refreshUser();
+      }
     } catch (e) {
       console.error("Failed to delete track", e);
     }
@@ -207,10 +211,15 @@ export default function Profile() {
                 return (
                 <div 
                   key={track.id}
-                  onClick={() => isActive ? togglePlay() : playTrack(track)}
-                  className={`flex items-center gap-4 p-3 rounded-xl hover:bg-black/5 transition-colors group cursor-pointer ${isActive ? 'bg-black/5' : ''}`}
+                  onClick={() => {
+                    if (isFutureRelease(track.releaseDate)) return;
+                    isActive ? togglePlay() : playTrack(track)
+                  }}
+                  className={`flex items-center gap-4 p-3 rounded-xl hover:bg-black/5 transition-colors group cursor-pointer ${isActive ? 'bg-black/5' : ''} ${isFutureRelease(track.releaseDate) ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
                 >
-                  <span className={`w-6 text-center font-mono text-sm ${isActive ? 'text-purple-500' : 'text-neutral-500'}`}>{i + 1}</span>
+                  <span className={`w-6 text-center font-mono text-sm ${isActive ? 'text-purple-500' : 'text-neutral-500'}`}>
+                    {isFutureRelease(track.releaseDate) ? <Clock className="w-4 h-4 mx-auto" /> : i + 1}
+                  </span>
                   <div className="w-12 h-12 bg-neutral-800 rounded-lg overflow-hidden relative">
                     {track.cover ? (
                       <img src={track.cover} alt="" className="w-full h-full object-cover" />
@@ -219,14 +228,21 @@ export default function Profile() {
                         <Music className="w-5 h-5 text-neutral-500" />
                       </div>
                     )}
-                    {isActive && isPlaying && (
+                    {isActive && isPlaying && !isFutureRelease(track.releaseDate) && (
                       <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                         <div className="w-3 h-3 bg-purple-500 rounded-full animate-pulse" />
                       </div>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className={`font-medium truncate ${isActive ? 'text-purple-500' : 'text-white'}`}>{track.title}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className={`font-medium truncate ${isActive ? 'text-purple-500' : 'text-white'}`}>{track.title}</h3>
+                      {isFutureRelease(track.releaseDate) && (
+                        <span className="text-[10px] font-bold text-pink-500 uppercase tracking-wider bg-pink-500/10 px-2 py-0.5 rounded-full border border-pink-500/20">
+                          Скоро
+                        </span>
+                      )}
+                    </div>
                     <p className="text-neutral-400 text-sm truncate">{track.artist}</p>
                   </div>
                   <button 

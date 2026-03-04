@@ -1,9 +1,10 @@
 import React from 'react';
-import { Search, Settings2, User, Play, Pause, Heart, Music, ArrowDown } from 'lucide-react';
+import { Search, Settings2, User, Play, Pause, Heart, Music, ArrowDown, Disc3, Trash2, Clock } from 'lucide-react';
 import { useAppContext, Track } from '../context/AppContext';
+import { isFutureRelease } from '../utils/date';
 
 export default function MainContent() {
-  const { user, setView, theme, allTracks, currentTrack, isPlaying, togglePlay, playTrack, likedTracks, toggleLike } = useAppContext();
+  const { user, setView, theme, allTracks, currentTrack, isPlaying, togglePlay, playTrack, likedTracks, toggleLike, playlists, setSelectedPlaylistId, refreshTracks } = useAppContext();
   
   // Format numbers with commas/spaces
   const formatNumber = (num: number) => {
@@ -12,6 +13,21 @@ export default function MainContent() {
 
   // Filter only user uploaded tracks for "My Tracks"
   const myTracks = allTracks.filter(t => t.uploaderId === user?.id);
+  
+  // Get public albums
+  const publicAlbums = playlists.filter(p => p.type === 'album' && p.isPublic);
+
+  const handleDeleteTrack = async (trackId: string) => {
+    if (!confirm('Удалить этот трек?')) return;
+    try {
+      const res = await fetch(`/api/tracks/${trackId}`, { method: 'DELETE' });
+      if (res.ok) {
+        refreshTracks();
+      }
+    } catch (e) {
+      console.error('Failed to delete track', e);
+    }
+  };
 
   return (
     <div className={`relative h-full overflow-hidden flex flex-col ${theme === 'light' ? 'bg-white' : 'bg-[#121212]'}`}>
@@ -52,7 +68,7 @@ export default function MainContent() {
       </div>
 
       {/* Scrollable Content Container */}
-      <div className="relative z-10 flex-1 overflow-y-auto custom-scrollbar pb-32 scroll-smooth">
+      <div className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar pb-24 scroll-smooth">
         
         {/* Slide 1: Stats (Full Screen) */}
         <div className="min-h-[90vh] flex flex-col px-4 md:px-8 pt-6 relative">
@@ -144,8 +160,68 @@ export default function MainContent() {
         </div>
 
         {/* Content Below Slide */}
-        <div className="px-4 md:px-8 pb-10 min-h-screen">
+        <div className="px-4 md:px-8 pb-10">
           
+          {/* Albums Section */}
+          {publicAlbums.length > 0 && (
+            <div className="mb-16 pt-10">
+              <h2 className="text-3xl font-bold text-white mb-8 px-2 tracking-tight">Новые альбомы</h2>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+                {publicAlbums.map(album => (
+                  <div 
+                    key={album.id} 
+                    className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4 group relative hover:bg-white/10 transition-colors cursor-pointer"
+                    onClick={() => {
+                      setSelectedPlaylistId(album.id);
+                      setView('playlist');
+                    }}
+                  >
+                    <div className="absolute top-2 right-2 z-10 bg-black/50 backdrop-blur-md px-2 py-1 rounded-lg border border-white/10 flex items-center gap-1.5">
+                      <Disc3 className="w-3 h-3 text-pink-500" />
+                      <span className="text-[10px] font-bold text-white uppercase tracking-wider">Альбом</span>
+                    </div>
+                    {isFutureRelease(album.releaseDate) && (
+                      <div className="absolute top-2 left-2 z-10 bg-pink-500/80 backdrop-blur-md px-2 py-1 rounded-lg border border-pink-500/20 flex items-center gap-1.5 shadow-lg">
+                        <Clock className="w-3 h-3 text-white" />
+                        <span className="text-[10px] font-bold text-white uppercase tracking-wider">Скоро</span>
+                      </div>
+                    )}
+                    <div className="aspect-square bg-neutral-800 rounded-xl mb-4 overflow-hidden relative shadow-lg">
+                      {album.cover ? (
+                        <img src={album.cover} alt={album.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neutral-700 to-neutral-900">
+                          <Disc3 className="w-12 h-12 text-neutral-500" />
+                        </div>
+                      )}
+                      
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isFutureRelease(album.releaseDate)) return;
+                          if (album.tracks.length > 0) {
+                            const firstTrack = allTracks.find(t => t.id === album.tracks[0]);
+                            if (firstTrack) playTrack(firstTrack);
+                          }
+                        }}
+                        className={`absolute bottom-2 right-2 w-12 h-12 rounded-full flex items-center justify-center text-white opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl hover:scale-105 ${isFutureRelease(album.releaseDate) ? 'bg-neutral-600 cursor-not-allowed' : 'bg-pink-500 hover:bg-pink-400'}`}
+                      >
+                        <Play className="w-6 h-6 fill-white ml-1" />
+                      </button>
+                    </div>
+                    
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-white truncate text-lg">{album.title}</h3>
+                      <p className="text-sm text-neutral-400 truncate mt-1">
+                        {album.tracks.length} треков
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* My Tracks Section */}
           {myTracks.length > 0 && (
             <div className="mb-16 pt-10">
@@ -165,10 +241,15 @@ export default function MainContent() {
                         </div>
                       )}
                       <button 
-                        onClick={() => currentTrack?.id === track.id && isPlaying ? togglePlay() : playTrack(track)}
-                        className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => {
+                          if (isFutureRelease(track.releaseDate)) return;
+                          currentTrack?.id === track.id && isPlaying ? togglePlay() : playTrack(track)
+                        }}
+                        className={`absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity ${isFutureRelease(track.releaseDate) ? 'cursor-not-allowed' : ''}`}
                       >
-                        {currentTrack?.id === track.id && isPlaying ? (
+                        {isFutureRelease(track.releaseDate) ? (
+                          <Clock className="w-8 h-8 text-white" />
+                        ) : currentTrack?.id === track.id && isPlaying ? (
                           <Pause className="w-8 h-8 text-white fill-current" />
                         ) : (
                           <Play className="w-8 h-8 text-white fill-current ml-1" />
@@ -176,17 +257,33 @@ export default function MainContent() {
                       </button>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className={`text-lg font-bold truncate ${currentTrack?.id === track.id ? 'text-pink-500' : 'text-white'}`}>
-                        {track.title}
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className={`text-lg font-bold truncate ${currentTrack?.id === track.id ? 'text-pink-500' : 'text-white'}`}>
+                          {track.title}
+                        </h3>
+                        {isFutureRelease(track.releaseDate) && (
+                          <span className="text-[10px] font-bold text-pink-500 uppercase tracking-wider bg-pink-500/10 px-2 py-0.5 rounded-full border border-pink-500/20">
+                            Скоро
+                          </span>
+                        )}
+                      </div>
                       <p className="text-base text-neutral-400 truncate font-medium">{track.artist}</p>
                     </div>
-                    <button 
-                      onClick={() => toggleLike(track.id)}
-                      className={`p-3 rounded-full transition-colors ${likedTracks.includes(track.id) ? 'text-pink-500' : 'text-neutral-500 hover:text-white'}`}
-                    >
-                      <Heart className={`w-6 h-6 ${likedTracks.includes(track.id) ? 'fill-current' : ''}`} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => toggleLike(track.id)}
+                        className={`p-3 rounded-full transition-colors ${likedTracks.includes(track.id) ? 'text-pink-500' : 'text-neutral-500 hover:text-white'}`}
+                      >
+                        <Heart className={`w-6 h-6 ${likedTracks.includes(track.id) ? 'fill-current' : ''}`} />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteTrack(track.id)}
+                        className="p-3 text-neutral-500 hover:text-red-500 hover:bg-white/5 rounded-full transition-colors"
+                        title="Удалить трек"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -213,10 +310,15 @@ export default function MainContent() {
                         </div>
                       )}
                       <button 
-                        onClick={() => currentTrack?.id === track.id && isPlaying ? togglePlay() : playTrack(track)}
-                        className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => {
+                          if (isFutureRelease(track.releaseDate)) return;
+                          currentTrack?.id === track.id && isPlaying ? togglePlay() : playTrack(track)
+                        }}
+                        className={`absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity ${isFutureRelease(track.releaseDate) ? 'cursor-not-allowed' : ''}`}
                       >
-                        {currentTrack?.id === track.id && isPlaying ? (
+                        {isFutureRelease(track.releaseDate) ? (
+                          <Clock className="w-8 h-8 text-white" />
+                        ) : currentTrack?.id === track.id && isPlaying ? (
                           <Pause className="w-8 h-8 text-white fill-current" />
                         ) : (
                           <Play className="w-8 h-8 text-white fill-current ml-1" />
@@ -224,9 +326,16 @@ export default function MainContent() {
                       </button>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className={`text-lg font-bold truncate ${currentTrack?.id === track.id ? 'text-pink-500' : 'text-white'}`}>
-                        {track.title}
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className={`text-lg font-bold truncate ${currentTrack?.id === track.id ? 'text-pink-500' : 'text-white'}`}>
+                          {track.title}
+                        </h3>
+                        {isFutureRelease(track.releaseDate) && (
+                          <span className="text-[10px] font-bold text-pink-500 uppercase tracking-wider bg-pink-500/10 px-2 py-0.5 rounded-full border border-pink-500/20">
+                            Скоро
+                          </span>
+                        )}
+                      </div>
                       <p className="text-base text-neutral-400 truncate font-medium">{track.artist}</p>
                     </div>
                     <div className="text-sm font-bold text-neutral-500 mr-4 flex items-center gap-1">

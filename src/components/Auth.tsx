@@ -1,174 +1,123 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { Music, ArrowRight, Loader2 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { User, Lock, ArrowRight, Music2, CheckCircle2, XCircle } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 
 export default function Auth() {
   const { login } = useAppContext();
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
-  const [checkingUsername, setCheckingUsername] = useState(false);
-
-  useEffect(() => {
-    // Simulate username check locally
-    if (username.length < 3) {
-      setIsAvailable(null);
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      setCheckingUsername(true);
-      // In a real local-only app, we might check against a list of users in localStorage
-      // For now, we'll just say it's available if it's not empty
-      setIsAvailable(true);
-      setCheckingUsername(false);
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [username, isLogin]);
+  const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!username.trim() || !password.trim()) return;
     
-    setError('');
     setLoading(true);
-
-    // Simulate network delay
-    setTimeout(() => {
-      const mockUser = {
-        id: 'user-' + Date.now(),
-        username: username,
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
-        cover: null,
-        trackCount: 0,
-        likes: []
-      };
+    setError('');
+    
+    try {
+      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
       
-      login(mockUser);
+      const data = await res.json();
+      
+      if (res.ok) {
+        login(data);
+      } else {
+        setError(data.error || 'Произошла ошибка');
+      }
+    } catch (err) {
+      setError('Ошибка сети. Попробуйте позже.');
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a] relative overflow-hidden p-4">
-      {/* Animated Background Gradients */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-pink-600/20 blur-[120px] rounded-full animate-pulse"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/20 blur-[120px] rounded-full animate-pulse delay-700"></div>
+    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Background Effects */}
+      <div className="absolute inset-0 z-0">
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-pink-600/20 blur-[120px] rounded-full mix-blend-screen" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-600/20 blur-[120px] rounded-full mix-blend-screen" />
+      </div>
 
       <motion.div 
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-md relative z-10"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 relative z-10 shadow-2xl"
       >
-        <div className="bg-white/5 backdrop-blur-2xl rounded-[2.5rem] p-8 md:p-10 border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
-          <div className="flex flex-col items-center mb-10">
-            <motion.div 
-              whileHover={{ rotate: 10 }}
-              className="w-20 h-20 bg-gradient-to-tr from-pink-500 to-purple-600 rounded-3xl flex items-center justify-center mb-6 shadow-xl shadow-pink-500/20"
-            >
-              <Music2 className="w-10 h-10 text-white" />
+        <div className="flex justify-center mb-8">
+          <div className="w-16 h-16 bg-gradient-to-br from-pink-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-pink-500/20">
+            <Music className="w-8 h-8 text-white" />
+          </div>
+        </div>
+
+        <h1 className="text-3xl font-black text-white text-center mb-2 tracking-tight">
+          {isLogin ? 'С возвращением' : 'Создать аккаунт'}
+        </h1>
+        <p className="text-neutral-400 text-center mb-8 font-medium">
+          {isLogin ? 'Войдите, чтобы продолжить слушать' : 'Присоединяйтесь к нашему сообществу'}
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-bold text-neutral-300 mb-1.5 uppercase tracking-wider">Имя пользователя</label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3.5 text-white focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all font-medium"
+              placeholder="Введите имя"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-bold text-neutral-300 mb-1.5 uppercase tracking-wider">Пароль</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3.5 text-white focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all font-medium"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+
+          {error && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-400 text-sm font-medium text-center bg-red-400/10 py-2 rounded-lg">
+              {error}
             </motion.div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">
-              {isLogin ? 'С возвращением' : 'Регистрация'}
-            </h1>
-            <p className="text-neutral-400 mt-3 text-center text-sm font-medium">
-              {isLogin ? 'Войдите в свой аккаунт' : 'Создайте новый аккаунт'}
-            </p>
-          </div>
+          )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-neutral-500 uppercase tracking-[0.1em] ml-1">Никнейм</label>
-              <div className="relative group">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-500 group-focus-within:text-pink-500 transition-colors" />
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full bg-white/5 text-white rounded-2xl py-4 pl-12 pr-12 focus:outline-none focus:ring-2 focus:ring-pink-500/50 transition-all border border-white/5 focus:border-pink-500/50 placeholder:text-neutral-600"
-                  placeholder="Ваш никнейм"
-                  required
-                />
-                <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                  {checkingUsername ? (
-                    <div className="w-4 h-4 border-2 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
-                  ) : isAvailable !== null && (
-                    isAvailable ? (
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                    ) : (
-                      <XCircle className="w-5 h-5 text-red-500" />
-                    )
-                  )}
-                </div>
-              </div>
-              {isAvailable === false && (
-                <p className="text-[10px] text-red-500 ml-1 font-medium">
-                  {isLogin ? 'Пользователь не найден' : 'Никнейм уже занят'}
-                </p>
-              )}
-            </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-white text-black font-bold rounded-xl px-4 py-4 mt-6 flex items-center justify-center gap-2 hover:bg-neutral-200 transition-colors disabled:opacity-70"
+          >
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+              <>
+                {isLogin ? 'Войти' : 'Зарегистрироваться'}
+                <ArrowRight className="w-5 h-5" />
+              </>
+            )}
+          </button>
+        </form>
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-neutral-500 uppercase tracking-[0.1em] ml-1">Пароль</label>
-              <div className="relative group">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-500 group-focus-within:text-pink-500 transition-colors" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-white/5 text-white rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-pink-500/50 transition-all border border-white/5 focus:border-pink-500/50 placeholder:text-neutral-600"
-                  placeholder="Ваш пароль"
-                  required
-                />
-              </div>
-            </div>
-
-            <AnimatePresence>
-              {error && (
-                <motion.div 
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="text-red-400 text-xs text-center bg-red-500/10 py-3 rounded-xl border border-red-500/20"
-                >
-                  {error}
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <button
-              type="submit"
-              disabled={loading || checkingUsername}
-              className="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 text-white font-bold py-4 rounded-2xl transition-all transform active:scale-[0.98] flex items-center justify-center gap-2 shadow-xl shadow-pink-500/20 mt-8 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <>
-                  <span>{isLogin ? 'Войти' : 'Создать аккаунт'}</span>
-                  <ArrowRight className="w-5 h-5" />
-                </>
-              )}
-            </button>
-          </form>
-
-          <div className="mt-8 text-center">
-            <button
-              onClick={() => {
-                setIsLogin(!isLogin);
-                setUsername('');
-                setPassword('');
-                setError('');
-                setIsAvailable(null);
-              }}
-              className="text-neutral-400 hover:text-pink-500 text-sm font-medium transition-colors"
-            >
-              {isLogin ? 'Нет аккаунта? Создать бесплатно' : 'Уже есть аккаунт? Войти'}
-            </button>
-          </div>
+        <div className="mt-8 text-center">
+          <button
+            onClick={() => { setIsLogin(!isLogin); setError(''); }}
+            className="text-neutral-400 hover:text-white text-sm font-medium transition-colors"
+          >
+            {isLogin ? 'Нет аккаунта? Зарегистрируйтесь' : 'Уже есть аккаунт? Войдите'}
+          </button>
         </div>
       </motion.div>
     </div>

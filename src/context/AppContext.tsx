@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { getAllTracksFromDB, updateTrackInDB } from '../utils/audioDb';
 
 // Types
 export interface User {
@@ -24,7 +23,8 @@ export interface Track {
   uploadedAt?: string;
   isExplicit?: boolean;
   status?: 'pending' | 'approved' | 'rejected';
-  fileBlob?: Blob; // Added for IndexedDB storage
+  lyrics?: string;
+  releaseDate?: string;
 }
 
 export interface Playlist {
@@ -36,6 +36,7 @@ export interface Playlist {
   tracks: string[];
   createdAt: string;
   type?: 'playlist' | 'album';
+  releaseDate?: string;
 }
 
 interface AppContextType {
@@ -57,6 +58,8 @@ interface AppContextType {
   isMiniPlayerVisible: boolean;
   setIsMiniPlayerVisible: (visible: boolean) => void;
   closePlayer: () => void;
+  repeatMode: 'off' | 'all' | 'one';
+  setRepeatMode: (mode: 'off' | 'all' | 'one') => void;
   
   // Auth & Data
   user: User | null;
@@ -101,10 +104,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [selectedArtistId, setSelectedArtistId] = useState<string | null>(null);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [repeatMode, setRepeatMode] = useState<'off' | 'all' | 'one'>('off');
   
   // Auth & Data State
   const [user, setUser] = useState<User | null>(null);
-  // Initialize with empty array, will load custom tracks in useEffect
   const [allTracks, setAllTracks] = useState<Track[]>([]);
   const [likedTracks, setLikedTracks] = useState<string[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
@@ -112,12 +115,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [accentColor, setAccentColor] = useState<string>('pink');
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // Refs for event listeners to access latest state
   const userRef = useRef(user);
   const allTracksRef = useRef(allTracks);
   const currentTrackRef = useRef(currentTrack);
   const isPlayingRef = useRef(isPlaying);
+  const repeatModeRef = useRef(repeatMode);
   const playTrackRef = useRef<(track: Track) => void>(() => {});
 
   useEffect(() => {
@@ -125,8 +130,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     allTracksRef.current = allTracks;
     currentTrackRef.current = currentTrack;
     isPlayingRef.current = isPlaying;
+    repeatModeRef.current = repeatMode;
     playTrackRef.current = playTrack;
   });
+
+  const refreshTracks = async () => {
+    try {
+      const res = await fetch('/api/tracks');
+      if (res.ok) {
+        const data = await res.json();
+        setAllTracks(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch tracks', e);
+    }
+  };
+
+  const refreshPlaylists = async () => {
+    try {
+      const res = await fetch('/api/playlists');
+      if (res.ok) {
+        const data = await res.json();
+        setPlaylists(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch playlists', e);
+    }
+  };
+
+  const refreshUser = async () => {
+    const currentUser = userRef.current;
+    if (!currentUser) return;
+    try {
+      const res = await fetch(`/api/users/${currentUser.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data);
+        setLikedTracks(data.likes || []);
+        localStorage.setItem('user', JSON.stringify(data));
+      }
+    } catch (e) {
+      console.error('Failed to fetch user', e);
+    }
+  };
 
   // Initialize Audio and Load Data
   useEffect(() => {
@@ -141,168 +187,68 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const playNextInternal = () => {
       const tracks = allTracksRef.current;
       const current = currentTrackRef.current;
+      const rMode = repeatModeRef.current;
+      
       if (!current || tracks.length === 0) return;
       
+      if (rMode === 'one') {
+        if (audioRef.current) {
+          audioRef.current.currentTime = 0;
+          audioRef.current.play();
+        }
+        return;
+      }
+
       const currentIndex = tracks.findIndex(t => t.id === current.id);
       const nextIndex = (currentIndex + 1) % tracks.length;
+      
+      if (rMode === 'off' && nextIndex === 0) {
+        setIsPlaying(false);
+        return;
+      }
+
       if (playTrackRef.current) {
         playTrackRef.current(tracks[nextIndex]);
       }
     };
 
-    const handleEnded = () => {
-      // Increment tracks played and minutes listened
-      const currentUser = userRef.current;
-      const currentTrack = currentTrackRef.current;
-      if (currentUser && audioRef.current) {
-        // Calculate minutes played (using track duration or actual played time if we tracked it)
-        // For simplicity, we add the full track duration in minutes
-        const minutesToAdd = audioRef.current.duration / 60;
-        
-        const updatedUser = { 
-          ...currentUser, 
-          tracksPlayed: (currentUser.tracksPlayed || 0) + 1,
-          minutesListened: Math.round((currentUser.minutesListened || 0) + minutesToAdd)
-        };
-        setUser(updatedUser);
-        localStorage.setItem('user', JSON.stringify(updatedUser));
-      }
-      playNextInternal();
-    };
-
-    const handleError = (e: Event) => {
-      console.error("Audio playback error:", audio.error);
-      // If error occurs, try to play next track to avoid stuck state
-      setTimeout(() => {
-        if (isPlayingRef.current) {
-          playNextInternal();
-        }
-      }, 1000);
-    };
-
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('error', handleError);
+    audio.addEventListener('ended', playNextInternal);
 
-    // Check for saved user
+    // Load initial data
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
       try {
-        const parsedUser = JSON.parse(savedUser);
-        // Ensure stats exist
-        if (parsedUser.minutesListened === undefined) parsedUser.minutesListened = 0;
-        if (parsedUser.tracksPlayed === undefined) parsedUser.tracksPlayed = 0;
-        
-        setUser(parsedUser);
-        if (parsedUser.likes) {
-          setLikedTracks(parsedUser.likes);
-        }
-      } catch (e) {
-        console.error("Failed to parse saved user", e);
-        localStorage.removeItem('user');
-      }
+        const parsed = JSON.parse(savedUser);
+        setUser(parsed);
+        setLikedTracks(parsed.likes || []);
+      } catch (e) {}
     }
 
-    const savedTheme = localStorage.getItem('theme') as 'dark' | 'light';
-    if (savedTheme) setTheme(savedTheme);
-    
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) setTheme(savedTheme as 'dark' | 'light');
+
     const savedAccent = localStorage.getItem('accentColor');
     if (savedAccent) setAccentColor(savedAccent);
 
-    // Load local playlists if any
-    const savedPlaylists = localStorage.getItem('playlists');
-    if (savedPlaylists) {
-      try {
-        setPlaylists(JSON.parse(savedPlaylists));
-      } catch (e) {
-        console.error("Failed to parse playlists", e);
-      }
-    }
-
-    // Load custom tracks from IndexedDB
-    const loadTracks = async () => {
-      try {
-        const tracks = await getAllTracksFromDB();
-        const processedTracks = tracks.map(t => {
-            if (t.fileBlob) {
-                return { ...t, url: URL.createObjectURL(t.fileBlob) };
-            }
-            return t;
-        });
-        setAllTracks(processedTracks);
-      } catch (e) {
-        console.error("Failed to load tracks from DB", e);
-      }
-    };
-    loadTracks();
-
-    // Clear old localStorage customTracks to avoid conflicts/errors
-    localStorage.removeItem('customTracks');
+    refreshTracks();
+    refreshPlaylists();
 
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('error', handleError);
+      audio.removeEventListener('ended', playNextInternal);
       audio.pause();
-      audioRef.current = null;
+      audio.src = '';
     };
   }, []);
 
-  const refreshTracks = async () => {
-      try {
-        const tracks = await getAllTracksFromDB();
-        const processedTracks = tracks.map(t => {
-            if (t.fileBlob) {
-                return { ...t, url: URL.createObjectURL(t.fileBlob) };
-            }
-            return t;
-        });
-        setAllTracks(processedTracks);
-      } catch (e) {
-        console.error("Failed to load tracks from DB", e);
-      }
-  };
-
-  const refreshUser = () => {
-    if (!user) return;
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      const parsedUser = JSON.parse(savedUser);
-      setUser(parsedUser);
-      if (parsedUser.likes) {
-        setLikedTracks(parsedUser.likes);
-      }
+  useEffect(() => {
+    if (user) {
+      refreshUser();
     }
-  };
-
-  const refreshPlaylists = () => {
-    const savedPlaylists = localStorage.getItem('playlists');
-    if (savedPlaylists) {
-      try {
-        setPlaylists(JSON.parse(savedPlaylists));
-      } catch (e) {
-        console.error("Failed to parse playlists", e);
-      }
-    }
-  };
-
-  const toggleLike = async (trackId: string) => {
-    if (!user) return;
-    
-    // Optimistic update
-    const newLikedTracks = likedTracks.includes(trackId) 
-      ? likedTracks.filter(id => id !== trackId) 
-      : [...likedTracks, trackId];
-    
-    setLikedTracks(newLikedTracks);
-
-    // Update user object in local storage
-    const updatedUser = { ...user, likes: newLikedTracks };
-    setUser(updatedUser);
-    localStorage.setItem('user', JSON.stringify(updatedUser));
-  };
+  }, [user?.id]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -311,46 +257,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [volume]);
 
   useEffect(() => {
-    if (currentTrack && audioRef.current) {
+    if (audioRef.current && currentTrack) {
       const audio = audioRef.current;
-      
-      if (!currentTrack.url) {
-        console.error("Track has no URL:", currentTrack);
-        setIsPlaying(false);
-        return;
-      }
-
-      // Check if the current src ends with the track url to handle absolute vs relative paths
-      const isSameTrack = audio.src === currentTrack.url || audio.src.endsWith(currentTrack.url);
-      
-      if (!isSameTrack) {
+      if (audio.src !== window.location.origin + currentTrack.url && audio.src !== currentTrack.url) {
         audio.src = currentTrack.url;
-        audio.load(); // Explicitly load the new source
+        audio.load();
       }
       
       if (isPlaying) {
         const playPromise = audio.play();
         if (playPromise !== undefined) {
-          playPromise.catch(e => {
-            if (e.name !== 'AbortError') {
-              console.error("Play error", e);
-              // If play fails immediately (e.g. no supported source), try next track
-              if (e.message.includes('no supported source')) {
-                 setTimeout(() => {
-                    if (isPlayingRef.current) {
-                      const tracks = allTracksRef.current;
-                      const current = currentTrackRef.current;
-                      if (!current || tracks.length === 0) return;
-                      
-                      const currentIndex = tracks.findIndex(t => t.id === current.id);
-                      const nextIndex = (currentIndex + 1) % tracks.length;
-                      if (playTrackRef.current) {
-                        playTrackRef.current(tracks[nextIndex]);
-                      }
-                    }
-                 }, 1000);
-              }
-            }
+          playPromise.catch(error => {
+            console.error("Audio play failed:", error);
+            setIsPlaying(false);
           });
         }
       } else {
@@ -368,35 +287,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const playTrack = async (track: Track) => {
-    // Increment plays
-    const updatedTrack = { ...track, plays: (track.plays || 0) + 1 };
-    
-    // Update locally
-    setAllTracks(prev => prev.map(t => t.id === track.id ? updatedTrack : t));
-    
-    // Update in DB if it's a user uploaded track
-    if (track.uploaderId !== 'system') {
-      try {
-        await updateTrackInDB(updatedTrack);
-      } catch (e) {
-        console.error("Failed to update track plays in DB", e);
-      }
-    }
-
-    // Update user stats
-    if (user) {
-      const updatedUser = {
-        ...user,
-        tracksPlayed: (user.tracksPlayed || 0) + 1,
-        minutesListened: (user.minutesListened || 0) + 3 // Assuming 3 mins per track for now
-      };
-      setUser(updatedUser);
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-    }
-
-    setCurrentTrack(updatedTrack);
+    setCurrentTrack(track);
     setIsPlaying(true);
     setIsMiniPlayerVisible(true);
+
+    // Clear previous timer
+    if (playTimerRef.current) clearTimeout(playTimerRef.current);
+
+    // Set timer to count as a view after 5 seconds
+    playTimerRef.current = setTimeout(async () => {
+      try {
+        await fetch(`/api/tracks/${track.id}/play`, { method: 'POST' });
+        refreshTracks();
+        
+        if (userRef.current) {
+          await fetch(`/api/users/${userRef.current.id}/stats`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tracksPlayed: 1, minutesListened: 3 })
+          });
+          refreshUser();
+        }
+      } catch (e) {
+        console.error("Failed to update stats", e);
+      }
+    }, 5000);
   };
 
   const closePlayer = () => {
@@ -426,7 +341,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const login = (userData: User) => {
-    // Simulate login by saving to local storage
     const userWithLikes = { 
       ...userData, 
       likes: userData.likes || [],
@@ -444,6 +358,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLikedTracks([]);
     localStorage.removeItem('user');
     setView('auth');
+  };
+
+  const toggleLike = async (trackId: string) => {
+    if (!user) return;
+    try {
+      const res = await fetch('/api/likes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, trackId })
+      });
+      if (res.ok) {
+        refreshUser();
+      }
+    } catch (e) {
+      console.error('Failed to toggle like', e);
+    }
   };
 
   useEffect(() => {
@@ -467,6 +397,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       volume, setVolume,
       isPlayerExpanded, setIsPlayerExpanded, 
       isMiniPlayerVisible, setIsMiniPlayerVisible, closePlayer,
+      repeatMode, setRepeatMode,
       user, login, logout, allTracks, refreshTracks, refreshUser,
       likedTracks, toggleLike,
       playlists, refreshPlaylists,
