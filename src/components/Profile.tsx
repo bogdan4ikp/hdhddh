@@ -1,28 +1,23 @@
 import React, { useRef, useState } from 'react';
-import { Settings, LogOut, Camera, Upload, Plus, Music, Trash2, Mic2, Clock } from 'lucide-react';
+import { Settings, LogOut, Camera, Upload, Plus, Music, Trash2, Mic2, Clock, CheckCircle2, X } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { isFutureRelease } from '../utils/date';
+import { motion, AnimatePresence } from 'motion/react';
 
 export default function Profile() {
   const { user, logout, allTracks, setView, refreshUser, refreshTracks, refreshPlaylists, theme, setTheme, accentColor, setAccentColor, playTrack, currentTrack, isPlaying, togglePlay } = useAppContext();
   const [isEditing, setIsEditing] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const [showBadgeModal, setShowBadgeModal] = useState(false);
   
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
   if (!user) return null;
 
-  const accentColors = [
-    { id: 'cyan', color: 'bg-cyan-500' },
-    { id: 'sky', color: 'bg-sky-500' },
-    { id: 'blue', color: 'bg-blue-500' },
-    { id: 'indigo', color: 'bg-indigo-500' },
-    { id: 'purple', color: 'bg-purple-500' },
-    { id: 'pink', color: 'bg-pink-500' },
-  ];
-
   const userTracks = allTracks.filter(t => t.uploaderId === user.id);
+  const totalPlays = userTracks.reduce((sum, t) => sum + (t.plays || 0), 0);
+  const totalTracks = userTracks.length;
+  const isVerified = totalTracks >= 3 && totalPlays >= 3000;
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'avatar' | 'cover') => {
     if (!e.target.files || !e.target.files[0]) return;
@@ -66,7 +61,7 @@ export default function Profile() {
         {user.cover ? (
           <img src={user.cover} alt="Cover" className="w-full h-full object-cover" />
         ) : (
-          <div className="w-full h-full bg-gradient-to-b from-sky-900 to-[#121212]"></div>
+          <div className="w-full h-full bg-gradient-to-br from-emerald-900 via-cyan-900 to-[#121212]"></div>
         )}
         
         <button 
@@ -83,7 +78,7 @@ export default function Profile() {
           accept="image/*"
         />
         
-        <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-transparent to-transparent"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/50 to-transparent"></div>
       </div>
 
       <div className="px-6 md:px-8 -mt-20 relative z-10">
@@ -94,7 +89,7 @@ export default function Profile() {
               {user.avatar ? (
                 <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center bg-cyan-600 text-4xl font-bold text-white">
+                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-emerald-500 to-cyan-600 text-4xl font-bold text-white">
                   {user.username[0].toUpperCase()}
                 </div>
               )}
@@ -116,23 +111,25 @@ export default function Profile() {
 
           {/* Info */}
           <div className="flex-1 mb-2">
-            <h1 className="text-3xl md:text-4xl font-bold text-white mb-1">{user.username}</h1>
+            <div className="flex items-center gap-3 mb-1">
+              <h1 className="text-3xl md:text-4xl font-bold text-white">{user.username}</h1>
+              <button 
+                onClick={() => setShowBadgeModal(true)}
+                className="focus:outline-none"
+                title="Статус артиста"
+              >
+                <CheckCircle2 className={`w-6 h-6 md:w-8 md:h-8 transition-colors ${isVerified ? 'text-[#1DB954]' : 'text-neutral-600 hover:text-neutral-400'}`} />
+              </button>
+            </div>
             <div className="flex items-center gap-4 text-neutral-400 text-sm">
-              <span>{user.trackCount} треков</span>
+              <span>{totalTracks} треков</span>
               <span>•</span>
-              <span>ID: {user.id.slice(0, 8)}</span>
+              <span>{totalPlays.toLocaleString()} прослушиваний</span>
             </div>
           </div>
 
           {/* Actions */}
           <div className="flex gap-3 w-full md:w-auto mt-4 md:mt-0">
-            <button 
-              onClick={() => setShowSettings(!showSettings)}
-              className={`p-3 border ${theme === 'light' ? 'border-black/10 text-black hover:bg-black/5' : 'border-white/20 text-white hover:bg-white/10'} rounded-full transition-colors`}
-              title="Настройки"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
             <button 
               onClick={() => setView('studio')}
               className={`flex-1 md:flex-none ${theme === 'light' ? 'bg-black text-white hover:bg-neutral-800' : 'bg-white text-black hover:bg-neutral-200'} px-6 py-3 rounded-full font-bold transition-colors flex items-center justify-center gap-2`}
@@ -149,47 +146,79 @@ export default function Profile() {
           </div>
         </div>
 
-        {/* Settings Panel */}
-        {showSettings && (
-          <div className={`mt-8 p-6 rounded-2xl border ${theme === 'light' ? 'bg-black/5 border-black/5' : 'bg-white/5 border-white/5'} backdrop-blur-xl`}>
-            <h2 className={`text-xl font-bold mb-6 ${theme === 'light' ? 'text-black' : 'text-white'}`}>Настройки оформления</h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Theme Toggle */}
-              <div>
-                <h3 className="text-sm font-bold text-neutral-500 uppercase tracking-wider mb-4">Тема приложения</h3>
-                <div className="flex p-1 bg-black/20 rounded-xl w-fit">
-                  <button 
-                    onClick={() => setTheme('dark')}
-                    className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${theme === 'dark' ? 'bg-white text-black shadow-lg' : 'text-neutral-400 hover:text-white'}`}
-                  >
-                    Темная
-                  </button>
-                  <button 
-                    onClick={() => setTheme('light')}
-                    className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${theme === 'light' ? 'bg-white text-black shadow-lg' : 'text-neutral-400 hover:text-white'}`}
-                  >
-                    Светлая
-                  </button>
+        {/* Badge Modal */}
+        <AnimatePresence>
+          {showBadgeModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-[#181818] border border-white/10 rounded-2xl p-6 md:p-8 max-w-md w-full relative shadow-2xl"
+              >
+                <button 
+                  onClick={() => setShowBadgeModal(false)}
+                  className="absolute top-4 right-4 text-neutral-400 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+                
+                <div className="text-center mb-6">
+                  <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-4 ${isVerified ? 'bg-[#1DB954]/20' : 'bg-neutral-800'}`}>
+                    <CheckCircle2 className={`w-10 h-10 ${isVerified ? 'text-[#1DB954]' : 'text-neutral-500'}`} />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white mb-2">
+                    {isVerified ? 'Подтвержденный артист' : 'Как получить галочку?'}
+                  </h2>
+                  <p className="text-neutral-400 text-sm">
+                    {isVerified 
+                      ? 'Поздравляем! Вы выполнили все условия и получили статус подтвержденного артиста.' 
+                      : 'Для получения галочки артиста необходимо выполнить следующие условия:'}
+                  </p>
                 </div>
-              </div>
 
-              {/* Accent Color Picker */}
-              <div>
-                <h3 className="text-sm font-bold text-neutral-500 uppercase tracking-wider mb-4">Акцентный цвет</h3>
-                <div className="flex flex-wrap gap-3">
-                  {accentColors.map((color) => (
-                    <button 
-                      key={color.id}
-                      onClick={() => setAccentColor(color.id)}
-                      className={`w-10 h-10 rounded-full ${color.color} transition-all ${accentColor === color.id ? 'ring-4 ring-white/30 scale-110 shadow-lg' : 'hover:scale-105 opacity-70 hover:opacity-100'}`}
-                    />
-                  ))}
+                <div className="space-y-4">
+                  <div className="bg-black/40 rounded-xl p-4 border border-white/5">
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-white font-medium">Опубликовать треки</span>
+                      <span className={totalTracks >= 3 ? 'text-[#1DB954]' : 'text-neutral-400'}>
+                        {totalTracks} / 3
+                      </span>
+                    </div>
+                    <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-[#1DB954] transition-all duration-500" 
+                        style={{ width: `${Math.min((totalTracks / 3) * 100, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-black/40 rounded-xl p-4 border border-white/5">
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-white font-medium">Собрать прослушивания</span>
+                      <span className={totalPlays >= 3000 ? 'text-[#1DB954]' : 'text-neutral-400'}>
+                        {totalPlays.toLocaleString()} / 3,000
+                      </span>
+                    </div>
+                    <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-[#1DB954] transition-all duration-500" 
+                        style={{ width: `${Math.min((totalPlays / 3000) * 100, 100)}%` }}
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
+                
+                <button 
+                  onClick={() => setShowBadgeModal(false)}
+                  className="w-full mt-6 bg-white text-black font-bold py-3 rounded-xl hover:bg-neutral-200 transition-colors"
+                >
+                  Понятно
+                </button>
+              </motion.div>
             </div>
-          </div>
-        )}
+          )}
+        </AnimatePresence>
 
         {/* Tracks Section */}
         <div className="mt-12">

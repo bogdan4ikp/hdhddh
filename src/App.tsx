@@ -12,6 +12,7 @@ import Library from './components/Library';
 import ArtistProfile from './components/ArtistProfile';
 import Search from './components/Search';
 import PlaylistView from './components/PlaylistView';
+import SetupProfile from './components/SetupProfile';
 import { AppProvider, useAppContext } from './context/AppContext';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -20,6 +21,10 @@ function AppContent() {
 
   if (!user) {
     return <Auth />;
+  }
+
+  if (user && !user.username) {
+    return <SetupProfile />;
   }
 
   return (

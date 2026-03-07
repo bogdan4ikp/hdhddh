@@ -67,8 +67,13 @@ export default function Studio() {
 
   // Upload Handlers
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+    let files = Array.from(e.target.files || []);
     if (files.length === 0) return;
+    
+    // If single release, only take the first file
+    if (releaseType === 'single') {
+      files = [files[0]];
+    }
     
     const newTracks = files.map((file: File) => ({
       file,
@@ -78,6 +83,7 @@ export default function Studio() {
     }));
     
     setTracksData(prev => {
+      if (releaseType === 'single') return newTracks;
       const combined = [...prev, ...newTracks];
       return combined.slice(0, 15);
     });
@@ -616,15 +622,18 @@ export default function Studio() {
 
                       <div className="space-y-6">
                         <div 
-                          onClick={() => { if (tracksData.length < 15) fileInputRef.current?.click() }}
-                          className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${tracksData.length >= 15 ? 'opacity-50 cursor-not-allowed border-white/5' : 'cursor-pointer border-white/10 hover:border-cyan-500/50 hover:bg-cyan-500/5'}`}
+                          onClick={() => { 
+                            if (releaseType === 'single' && tracksData.length >= 1) return;
+                            if (tracksData.length < 15) fileInputRef.current?.click();
+                          }}
+                          className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${(releaseType === 'single' && tracksData.length >= 1) || tracksData.length >= 15 ? 'opacity-50 cursor-not-allowed border-white/5' : 'cursor-pointer border-white/10 hover:border-cyan-500/50 hover:bg-cyan-500/5'}`}
                         >
                           <input type="file" ref={fileInputRef} accept="audio/*" multiple={releaseType === 'album'} onChange={handleFileSelect} className="hidden" />
                           <Upload className="w-8 h-8 text-neutral-500 mx-auto mb-4" />
                           <h4 className="font-bold text-white mb-1">
-                            {tracksData.length > 0 ? 'Добавить еще треки' : 'Загрузить аудиофайлы'}
+                            {tracksData.length > 0 ? (releaseType === 'single' ? 'Трек загружен' : 'Добавить еще треки') : 'Загрузить аудиофайлы'}
                           </h4>
-                          <p className="text-sm text-neutral-500">WAV, FLAC, MP3 (Макс. 15 треков)</p>
+                          <p className="text-sm text-neutral-500">WAV, FLAC, MP3 (Макс. {releaseType === 'single' ? '1 трек' : '15 треков'})</p>
                         </div>
 
                         {tracksData.length > 0 && (
