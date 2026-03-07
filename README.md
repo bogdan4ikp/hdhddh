@@ -1,20 +1,36 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# SocialHub
 
-# Run and deploy your AI Studio app
+Мини-социальная сеть на **React + Express + SQLite** с:
 
-This contains everything you need to run your app locally.
+- регистрацией по username/email/password;
+- входом через Google (Google Identity Services + проверка ID token на сервере);
+- публикацией постов;
+- лайками постов;
+- локальным SQLite-хранилищем.
 
-View your app in AI Studio: https://ai.studio/apps/85c01846-c9ba-4c4f-b412-2d3de584d3b7
+## Запуск
 
-## Run Locally
+1. Установите зависимости:
+   ```bash
+   npm install
+   ```
+2. Создайте `.env` на основе `.env.example`.
+3. Укажите `GOOGLE_CLIENT_ID` и `VITE_GOOGLE_CLIENT_ID` (если нужен Google вход).
+4. Запустите сервер и фронтенд одной командой:
+   ```bash
+   npm run dev
+   ```
+5. Откройте:
+   ```
+   http://localhost:3000
+   ```
 
-**Prerequisites:**  Node.js
+## Основные API endpoints
 
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/google`
+- `GET /api/posts?userId=<id>`
+- `POST /api/posts`
+- `POST /api/posts/like`
+- `GET /api/health`
