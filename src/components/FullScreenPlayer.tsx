@@ -100,7 +100,7 @@ export default function FullScreenPlayer() {
         </div>
         <button 
           onClick={() => setShowLyrics(!showLyrics)}
-          className={`w-10 h-10 flex items-center justify-center rounded-full transition-colors ${showLyrics ? 'bg-pink-500 text-white' : 'hover:bg-white/10 text-white'}`}
+          className={`w-10 h-10 flex items-center justify-center rounded-full transition-colors ${showLyrics ? 'bg-cyan-500 text-white' : 'hover:bg-white/10 text-white'}`}
         >
           <MessageSquareQuote className="w-5 h-5" />
         </button>
@@ -158,11 +158,11 @@ export default function FullScreenPlayer() {
                       transition={{ duration: 0.5, ease: "easeOut" }}
                       className="absolute inset-0 flex items-center justify-center pointer-events-none"
                     >
-                      <Heart className="w-8 h-8 text-pink-500 fill-pink-500" />
+                      <Heart className="w-8 h-8 text-cyan-500 fill-cyan-500" />
                     </motion.div>
                   )}
                 </AnimatePresence>
-                <Heart className={`w-8 h-8 transition-all ${currentTrack && likedTracks.includes(currentTrack.id) ? 'text-pink-500 fill-pink-500 scale-110' : 'text-white'}`} />
+                <Heart className={`w-8 h-8 transition-all ${currentTrack && likedTracks.includes(currentTrack.id) ? 'text-cyan-500 fill-cyan-500 scale-110' : 'text-white'}`} />
               </button>
             </div>
           </>
@@ -202,7 +202,7 @@ export default function FullScreenPlayer() {
           
           <button 
             onClick={togglePlay}
-            className="w-20 h-20 flex items-center justify-center bg-white text-black rounded-full hover:scale-105 active:scale-95 transition-all shadow-[0_0_30px_rgba(255,255,255,0.3)]"
+            className="w-20 h-20 flex items-center justify-center bg-cyan-400 text-black rounded-full hover:scale-105 active:scale-95 transition-all shadow-[0_0_30px_rgba(34,211,238,0.3)]"
           >
             {isPlaying ? (
               <Pause className="w-8 h-8 fill-current" />
@@ -220,11 +220,11 @@ export default function FullScreenPlayer() {
 
           <button 
             onClick={toggleRepeat}
-            className={`transition-colors relative ${repeatMode !== 'off' ? 'text-pink-500' : 'text-white/40 hover:text-white'}`}
+            className={`transition-colors relative ${repeatMode !== 'off' ? 'text-cyan-500' : 'text-white/40 hover:text-white'}`}
           >
             <Repeat className="w-6 h-6" />
             {repeatMode === 'one' && (
-              <span className="absolute -top-2 -right-2 text-[10px] font-bold bg-pink-500 text-white rounded-full w-4 h-4 flex items-center justify-center">1</span>
+              <span className="absolute -top-2 -right-2 text-[10px] font-bold bg-cyan-500 text-white rounded-full w-4 h-4 flex items-center justify-center">1</span>
             )}
           </button>
         </div>

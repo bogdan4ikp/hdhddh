@@ -10,7 +10,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, AreaChart, Area
 } from 'recharts';
 import { isFutureRelease } from '../utils/date';
-import { db, readFileAsBase64 } from '../services/db';
+import { api } from '../services/api';
 
 interface TrackUploadData {
   file: File;
@@ -70,7 +70,7 @@ export default function Studio() {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
     
-    const newTracks = files.map(file => ({
+    const newTracks = files.map((file: File) => ({
       file,
       title: file.name.replace(/\.[^/.]+$/, ""),
       coverFile: null,
@@ -112,43 +112,60 @@ export default function Studio() {
     setUploadProgress(10);
 
     try {
-      // Convert main cover to base64
-      let mainCoverBase64 = '';
+      // Upload main cover
+      let mainCoverUrl = '';
       if (coverFile) {
-        mainCoverBase64 = await readFileAsBase64(coverFile);
+        mainCoverUrl = await api.uploadFile(coverFile);
       } else {
         // Default cover
-        mainCoverBase64 = `https://picsum.photos/seed/${title}/500/500`;
+        mainCoverUrl = `https://picsum.photos/seed/${title}/500/500`;
       }
 
       setUploadProgress(30);
+
+      const uploadedTrackIds: string[] = [];
 
       // Process each track
       for (let i = 0; i < tracksData.length; i++) {
         const trackData = tracksData[i];
         
-        // Read audio file
-        const audioBase64 = await readFileAsBase64(trackData.file);
+        // Upload audio file
+        const audioUrl = await api.uploadFile(trackData.file);
         
-        // Read track cover if exists, else use main cover
-        let trackCoverBase64 = mainCoverBase64;
+        // Upload track cover if exists, else use main cover
+        let trackCoverUrl = mainCoverUrl;
         if (trackData.coverFile) {
-          trackCoverBase64 = await readFileAsBase64(trackData.coverFile);
+          trackCoverUrl = await api.uploadFile(trackData.coverFile);
         }
 
-        await db.uploadTrack({
+        const newTrack = await api.createTrack({
           title: trackData.title || title,
           artist: user.username,
-          cover: trackCoverBase64,
-          url: audioBase64,
+          cover: trackCoverUrl,
+          url: audioUrl,
           uploaderId: user.id,
           isExplicit: isExplicit,
           lyrics: trackData.lyrics,
           releaseDate: releaseDate || undefined,
-          status: 'approved' // Auto-approve for local demo
+          status: 'approved'
         });
+        
+        uploadedTrackIds.push(newTrack.id);
 
         setUploadProgress(30 + ((i + 1) / tracksData.length) * 60);
+      }
+
+      // If album, create playlist
+      if (releaseType === 'album' && uploadedTrackIds.length > 0) {
+        await api.createPlaylist({
+          title: title,
+          authorId: user.id,
+          cover: mainCoverUrl,
+          isPublic: true,
+          tracks: uploadedTrackIds,
+          type: 'album',
+          releaseDate: releaseDate || undefined
+        });
       }
 
       setUploadProgress(100);
@@ -181,7 +198,7 @@ export default function Studio() {
       <div className="w-64 border-r border-white/5 bg-[#09090b] flex flex-col hidden md:flex">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-8">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
               <BarChart3 className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -228,7 +245,7 @@ export default function Studio() {
         {/* Mobile Header */}
         <div className="md:hidden p-4 border-b border-white/5 flex items-center justify-between sticky top-0 bg-[#09090b]/80 backdrop-blur-xl z-50">
           <div className="flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-indigo-500" />
+            <BarChart3 className="w-6 h-6 text-cyan-500" />
             <span className="font-bold">Студия</span>
           </div>
           <button onClick={() => setActiveTab('upload')} className="bg-white text-black px-4 py-2 rounded-lg text-sm font-bold">
@@ -236,7 +253,7 @@ export default function Studio() {
           </button>
         </div>
 
-        <div className="p-6 md:p-10 max-w-7xl mx-auto pb-40">
+        <div className="p-6 md:p-10 max-w-7xl mx-auto pb-64">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
@@ -257,13 +274,13 @@ export default function Studio() {
                     <StatCard 
                       title="Всего прослушиваний" 
                       value={totalPlays.toLocaleString()} 
-                      icon={<Play className="text-indigo-500" />} 
+                      icon={<Play className="text-cyan-500" />} 
                       trend="+12.5%" 
                     />
                     <StatCard 
                       title="Всего треков" 
                       value={totalTracks.toString()} 
-                      icon={<Music className="text-purple-500" />} 
+                      icon={<Music className="text-sky-500" />} 
                       trend="+2" 
                     />
                     <StatCard 
@@ -291,8 +308,8 @@ export default function Studio() {
                           <AreaChart data={analyticsData}>
                             <defs>
                               <linearGradient id="colorPlays" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
-                                <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                                <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.3}/>
+                                <stop offset="95%" stopColor="#22d3ee" stopOpacity={0}/>
                               </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
@@ -302,7 +319,7 @@ export default function Studio() {
                               contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
                               itemStyle={{ color: '#fff' }}
                             />
-                            <Area type="monotone" dataKey="plays" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#colorPlays)" />
+                            <Area type="monotone" dataKey="plays" stroke="#22d3ee" strokeWidth={2} fillOpacity={1} fill="url(#colorPlays)" />
                           </AreaChart>
                         </ResponsiveContainer>
                       </div>
@@ -314,14 +331,14 @@ export default function Studio() {
                       <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
                         {topTracksData.map((track, i) => (
                           <div key={i} className="flex items-center gap-3 group">
-                            <div className="w-8 h-8 rounded bg-white/5 flex items-center justify-center text-xs font-bold text-neutral-500 group-hover:bg-indigo-500 group-hover:text-white transition-colors">
+                            <div className="w-8 h-8 rounded bg-white/5 flex items-center justify-center text-xs font-bold text-neutral-500 group-hover:bg-cyan-500 group-hover:text-white transition-colors">
                               {i + 1}
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium truncate">{track.fullTitle}</p>
                               <div className="w-full bg-white/5 h-1.5 rounded-full mt-1.5 overflow-hidden">
                                 <div 
-                                  className="h-full bg-indigo-500 rounded-full" 
+                                  className="h-full bg-cyan-500 rounded-full" 
                                   style={{ width: `${(track.plays / (topTracksData[0]?.plays || 1)) * 100}%` }}
                                 />
                               </div>
@@ -335,7 +352,7 @@ export default function Studio() {
                       </div>
                       <button 
                         onClick={() => setActiveTab('content')}
-                        className="mt-6 w-full py-2 text-sm font-medium text-indigo-400 hover:text-indigo-300 transition-colors border-t border-white/5 pt-4"
+                        className="mt-6 w-full py-2 text-sm font-medium text-cyan-400 hover:text-cyan-300 transition-colors border-t border-white/5 pt-4"
                       >
                         Смотреть весь контент
                       </button>
@@ -357,7 +374,7 @@ export default function Studio() {
                         <input 
                           type="text" 
                           placeholder="Фильтр треков..." 
-                          className="bg-[#121212] border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-indigo-500 w-64"
+                          className="bg-[#121212] border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-cyan-500 w-64"
                         />
                       </div>
                       <button className="p-2 bg-[#121212] border border-white/10 rounded-lg hover:bg-white/5">
@@ -412,7 +429,7 @@ export default function Studio() {
                         {userTracks.length === 0 && (
                           <tr>
                             <td colSpan={4} className="p-12 text-center text-neutral-500">
-                              Треки не найдены. <button onClick={() => setActiveTab('upload')} className="text-indigo-400 hover:underline">Загрузить первый трек</button>
+                              Треки не найдены. <button onClick={() => setActiveTab('upload')} className="text-cyan-400 hover:underline">Загрузить первый трек</button>
                             </td>
                           </tr>
                         )}
@@ -423,15 +440,76 @@ export default function Studio() {
               )}
 
               {activeTab === 'analytics' && (
-                <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-4">
-                  <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center">
-                    <BarChart3 className="w-10 h-10 text-neutral-600" />
+                <div className="space-y-8">
+                  <header>
+                    <h2 className="text-3xl font-bold tracking-tight mb-1">Аналитика</h2>
+                    <p className="text-neutral-400">Подробная статистика ваших треков.</p>
+                  </header>
+
+                  {/* Main Chart */}
+                  <div className="bg-[#121212] border border-white/5 rounded-2xl p-6 shadow-xl">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="font-bold text-lg">Прослушивания</h3>
+                      <div className="flex gap-2">
+                        <select className="bg-black border border-white/10 rounded-lg text-xs px-3 py-1.5 text-neutral-400 focus:outline-none">
+                          <option>Последние 7 дней</option>
+                          <option>Последние 30 дней</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="h-[300px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={analyticsData}>
+                          <defs>
+                            <linearGradient id="colorPlays" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.3}/>
+                              <stop offset="95%" stopColor="#22d3ee" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                          <XAxis dataKey="name" stroke="#525252" fontSize={12} tickLine={false} axisLine={false} dy={10} />
+                          <YAxis stroke="#525252" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => value >= 1000 ? `${value/1000}k` : value} />
+                          <Tooltip 
+                            contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                            itemStyle={{ color: '#fff' }}
+                          />
+                          <Area type="monotone" dataKey="plays" stroke="#22d3ee" strokeWidth={2} fillOpacity={1} fill="url(#colorPlays)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
-                  <h2 className="text-2xl font-bold">Расширенная аналитика</h2>
-                  <p className="text-neutral-500 max-w-md">Детальная статистика аудитории, демография и отчеты о доходах доступны в Pro плане.</p>
-                  <button className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-500 transition-colors">
-                    Перейти на Pro
-                  </button>
+
+                  {/* Track Stats List */}
+                  <div className="bg-[#121212] border border-white/5 rounded-2xl overflow-hidden shadow-xl">
+                    <div className="p-6 border-b border-white/5">
+                      <h3 className="font-bold text-lg">Статистика по трекам</h3>
+                    </div>
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-white/5 text-xs font-bold uppercase tracking-wider text-neutral-500 bg-white/[0.02]">
+                          <th className="p-4 pl-6">Трек</th>
+                          <th className="p-4 text-right pr-6">Прослушивания</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {userTracks.map((track, i) => (
+                          <tr key={track.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                            <td className="p-4 pl-6">
+                              <div className="flex items-center gap-4">
+                                <span className="text-neutral-500 font-mono text-xs w-6">{i + 1}</span>
+                                <div className="min-w-0">
+                                  <p className="font-medium text-white truncate">{track.title}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="p-4 pr-6 text-right font-mono text-sm text-neutral-300">
+                              {(track.plays || 0).toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
 
@@ -449,7 +527,7 @@ export default function Studio() {
                     {/* Step 1: Release Info */}
                     <div className="bg-[#121212] border border-white/5 rounded-2xl p-6 md:p-8 shadow-xl">
                       <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-full bg-indigo-500/10 text-indigo-500 flex items-center justify-center text-xs font-bold border border-indigo-500/20">1</span>
+                        <span className="w-6 h-6 rounded-full bg-cyan-500/10 text-cyan-500 flex items-center justify-center text-xs font-bold border border-cyan-500/20">1</span>
                         Детали релиза
                       </h3>
                       
@@ -458,18 +536,18 @@ export default function Studio() {
                           <button 
                             type="button" 
                             onClick={() => { setReleaseType('single'); setTracksData([]); }}
-                            className={`p-4 rounded-xl border text-left transition-all ${releaseType === 'single' ? 'bg-indigo-500/10 border-indigo-500 text-white' : 'bg-black border-white/10 text-neutral-400 hover:border-white/20'}`}
+                            className={`p-4 rounded-xl border text-left transition-all ${releaseType === 'single' ? 'bg-cyan-500/10 border-cyan-500 text-white' : 'bg-black border-white/10 text-neutral-400 hover:border-white/20'}`}
                           >
-                            <Disc className={`w-6 h-6 mb-3 ${releaseType === 'single' ? 'text-indigo-500' : 'text-neutral-500'}`} />
+                            <Disc className={`w-6 h-6 mb-3 ${releaseType === 'single' ? 'text-cyan-500' : 'text-neutral-500'}`} />
                             <div className="font-bold text-sm">Сингл</div>
                             <div className="text-xs opacity-60 mt-1">1 трек</div>
                           </button>
                           <button 
                             type="button" 
                             onClick={() => { setReleaseType('album'); setTracksData([]); }}
-                            className={`p-4 rounded-xl border text-left transition-all ${releaseType === 'album' ? 'bg-indigo-500/10 border-indigo-500 text-white' : 'bg-black border-white/10 text-neutral-400 hover:border-white/20'}`}
+                            className={`p-4 rounded-xl border text-left transition-all ${releaseType === 'album' ? 'bg-cyan-500/10 border-cyan-500 text-white' : 'bg-black border-white/10 text-neutral-400 hover:border-white/20'}`}
                           >
-                            <ListMusic className={`w-6 h-6 mb-3 ${releaseType === 'album' ? 'text-indigo-500' : 'text-neutral-500'}`} />
+                            <ListMusic className={`w-6 h-6 mb-3 ${releaseType === 'album' ? 'text-cyan-500' : 'text-neutral-500'}`} />
                             <div className="font-bold text-sm">Альбом / EP</div>
                             <div className="text-xs opacity-60 mt-1">2+ трека</div>
                           </button>
@@ -482,7 +560,7 @@ export default function Studio() {
                               type="text" 
                               value={title} 
                               onChange={e => setTitle(e.target.value)} 
-                              className="w-full bg-black border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                              className="w-full bg-black border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-cyan-500 transition-colors"
                               placeholder={releaseType === 'single' ? "Название трека" : "Название альбома"}
                               required 
                             />
@@ -493,7 +571,7 @@ export default function Studio() {
                               type="date" 
                               value={releaseDate} 
                               onChange={e => setReleaseDate(e.target.value)} 
-                              className="w-full bg-black border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors [color-scheme:dark]" 
+                              className="w-full bg-black border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-cyan-500 transition-colors [color-scheme:dark]" 
                             />
                           </div>
                         </div>
@@ -519,7 +597,7 @@ export default function Studio() {
                               <button 
                                 type="button" 
                                 onClick={() => document.querySelector<HTMLInputElement>('input[type="file"][accept="image/*"]')?.click()}
-                                className="text-indigo-400 hover:text-indigo-300 font-medium"
+                                className="text-cyan-400 hover:text-cyan-300 font-medium"
                               >
                                 Загрузить изображение
                               </button>
@@ -532,14 +610,14 @@ export default function Studio() {
                     {/* Step 2: Audio */}
                     <div className="bg-[#121212] border border-white/5 rounded-2xl p-6 md:p-8 shadow-xl">
                       <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-full bg-indigo-500/10 text-indigo-500 flex items-center justify-center text-xs font-bold border border-indigo-500/20">2</span>
+                        <span className="w-6 h-6 rounded-full bg-cyan-500/10 text-cyan-500 flex items-center justify-center text-xs font-bold border border-cyan-500/20">2</span>
                         Аудио и метаданные
                       </h3>
 
                       <div className="space-y-6">
                         <div 
                           onClick={() => { if (tracksData.length < 15) fileInputRef.current?.click() }}
-                          className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${tracksData.length >= 15 ? 'opacity-50 cursor-not-allowed border-white/5' : 'cursor-pointer border-white/10 hover:border-indigo-500/50 hover:bg-indigo-500/5'}`}
+                          className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${tracksData.length >= 15 ? 'opacity-50 cursor-not-allowed border-white/5' : 'cursor-pointer border-white/10 hover:border-cyan-500/50 hover:bg-cyan-500/5'}`}
                         >
                           <input type="file" ref={fileInputRef} accept="audio/*" multiple={releaseType === 'album'} onChange={handleFileSelect} className="hidden" />
                           <Upload className="w-8 h-8 text-neutral-500 mx-auto mb-4" />
@@ -563,7 +641,7 @@ export default function Studio() {
                                         type="text" 
                                         value={track.title} 
                                         onChange={(e) => updateTrackData(idx, 'title', e.target.value)} 
-                                        className="bg-black border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                                        className="bg-black border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
                                         placeholder="Название трека"
                                       />
                                       <div className="flex items-center gap-2 text-sm text-neutral-500 bg-black border border-white/10 rounded-lg px-3 py-2">
@@ -575,7 +653,7 @@ export default function Studio() {
                                       value={track.lyrics} 
                                       onChange={(e) => updateTrackData(idx, 'lyrics', e.target.value)} 
                                       placeholder="Текст песни (опционально)" 
-                                      className="w-full bg-black border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 min-h-[60px] resize-y"
+                                      className="w-full bg-black border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 min-h-[60px] resize-y"
                                     />
                                   </div>
                                   <button 
@@ -597,7 +675,7 @@ export default function Studio() {
                             id="explicit" 
                             checked={isExplicit} 
                             onChange={e => setIsExplicit(e.target.checked)} 
-                            className="w-4 h-4 rounded border-white/10 bg-black accent-indigo-500" 
+                            className="w-4 h-4 rounded border-white/10 bg-black accent-cyan-500" 
                           />
                           <label htmlFor="explicit" className="text-sm font-medium text-neutral-300">
                             Содержит ненормативную лексику
@@ -647,7 +725,7 @@ function SidebarItem({ icon, label, active, onClick }: { icon: React.ReactNode, 
       onClick={onClick}
       className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${active ? 'bg-white/10 text-white' : 'text-neutral-400 hover:text-white hover:bg-white/5'}`}
     >
-      <span className={active ? 'text-indigo-400' : 'text-neutral-500'}>{icon}</span>
+      <span className={active ? 'text-cyan-400' : 'text-neutral-500'}>{icon}</span>
       {label}
     </button>
   );

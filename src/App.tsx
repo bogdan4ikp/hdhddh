@@ -31,7 +31,7 @@ function AppContent() {
 
       {/* Main Layout */}
       <div className="flex flex-1 overflow-hidden relative z-10">
-        <div className="flex-1 overflow-y-auto relative">
+        <div className="flex-1 relative h-full">
           <AnimatePresence mode="wait">
             <motion.div
               key={selectedArtistId ? `artist-${selectedArtistId}` : currentView}
@@ -39,7 +39,7 @@ function AppContent() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.3, ease: "easeInOut" }}
-              className="h-full"
+              className="h-full w-full"
             >
               {selectedArtistId ? (
                 <ArtistProfile 

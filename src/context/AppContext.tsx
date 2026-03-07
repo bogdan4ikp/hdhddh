@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { db } from '../services/db';
+import { api } from '../services/api';
 
 // Types
 export interface User {
   id: string;
   username: string;
+  email?: string;
   avatar: string | null;
   cover: string | null;
   trackCount: number;
@@ -113,7 +114,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [likedTracks, setLikedTracks] = useState<string[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-  const [accentColor, setAccentColor] = useState<string>('pink');
+  const [accentColor, setAccentColor] = useState<string>('cyan');
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -135,9 +136,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     playTrackRef.current = playTrack;
   });
 
+  const login = (userData: User) => {
+    const userWithLikes = { 
+      ...userData, 
+      likes: userData.likes || [],
+      minutesListened: userData.minutesListened || 0,
+      tracksPlayed: userData.tracksPlayed || 0
+    };
+    setUser(userWithLikes);
+    setLikedTracks(userWithLikes.likes || []);
+    localStorage.setItem('user', JSON.stringify(userWithLikes));
+    setView('home');
+  };
+
+  const logout = () => {
+    setUser(null);
+    setLikedTracks([]);
+    localStorage.removeItem('user');
+    setView('auth');
+  };
+
   const refreshTracks = async () => {
     try {
-      const tracks = await db.getTracks();
+      const tracks = await api.getTracks();
       setAllTracks(tracks);
     } catch (e) {
       console.error('Failed to fetch tracks', e);
@@ -146,7 +167,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const refreshPlaylists = async () => {
     try {
-      const playlists = await db.getPlaylists();
+      const playlists = await api.getPlaylists();
       setPlaylists(playlists);
     } catch (e) {
       console.error('Failed to fetch playlists', e);
@@ -157,14 +178,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const currentUser = userRef.current;
     if (!currentUser) return;
     try {
-      const userData = await db.getUser(currentUser.id);
+      const userData = await api.getUser(currentUser.id);
       if (userData) {
         setUser(userData);
         setLikedTracks(userData.likes || []);
         localStorage.setItem('user', JSON.stringify(userData));
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to fetch user', e);
+      // If user not found (e.g. deleted from DB but exists in local storage), logout
+      const errorMessage = e.message || '';
+      if (errorMessage.includes('User not found') || errorMessage.includes('"error":"User not found"')) {
+        logout();
+      }
     }
   };
 
@@ -178,6 +204,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
     const handleLoadedMetadata = () => setDuration(audio.duration);
     
+    let consecutiveErrors = 0;
+
     const playNextInternal = () => {
       const tracks = allTracksRef.current;
       const current = currentTrackRef.current;
@@ -188,7 +216,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (rMode === 'one') {
         if (audioRef.current) {
           audioRef.current.currentTime = 0;
-          audioRef.current.play();
+          audioRef.current.play().catch(e => console.error("Replay failed", e));
         }
         return;
       }
@@ -206,9 +234,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
+    const handleError = (e: Event) => {
+      console.error("Audio playback error:", e);
+      consecutiveErrors++;
+      
+      if (consecutiveErrors > allTracksRef.current.length) {
+        console.error("Too many consecutive errors, stopping playback");
+        setIsPlaying(false);
+        consecutiveErrors = 0;
+        return;
+      }
+      
+      // Automatically skip to next track on error
+      playNextInternal();
+    };
+
+    const handlePlay = () => {
+      consecutiveErrors = 0; // Reset errors on successful play
+    };
+
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
     audio.addEventListener('ended', playNextInternal);
+    audio.addEventListener('error', handleError);
+    audio.addEventListener('play', handlePlay);
 
     // Load initial data
     const savedUser = localStorage.getItem('user');
@@ -233,6 +282,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
       audio.removeEventListener('ended', playNextInternal);
+      audio.removeEventListener('error', handleError);
+      audio.removeEventListener('play', handlePlay);
       audio.pause();
       audio.src = '';
     };
@@ -253,6 +304,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (audioRef.current && currentTrack) {
       const audio = audioRef.current;
+      
+      if (!currentTrack.url) {
+        console.error("Track URL is missing for track:", currentTrack.id);
+        setIsPlaying(false);
+        return;
+      }
+
       if (audio.src !== window.location.origin + currentTrack.url && audio.src !== currentTrack.url) {
         audio.src = currentTrack.url;
         audio.load();
@@ -263,7 +321,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (playPromise !== undefined) {
           playPromise.catch(error => {
             console.error("Audio play failed:", error);
-            setIsPlaying(false);
+            // Only stop playing if it's an AbortError or NotAllowedError
+            // NotSupportedError is handled by the 'error' event listener
+            if (error.name === 'NotAllowedError') {
+              setIsPlaying(false);
+            }
           });
         }
       } else {
@@ -291,11 +353,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // Set timer to count as a view after 5 seconds
     playTimerRef.current = setTimeout(async () => {
       try {
-        await db.incrementPlayCount(track.id);
+        await api.incrementPlayCount(track.id);
         refreshTracks();
         
         if (userRef.current) {
-          await db.updateUserStats(userRef.current.id, { tracksPlayed: 1, minutesListened: 3 });
+          await api.updateUserStats(userRef.current.id, { tracksPlayed: 1, minutesListened: 3 });
           refreshUser();
         }
       } catch (e) {
@@ -330,30 +392,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const login = (userData: User) => {
-    const userWithLikes = { 
-      ...userData, 
-      likes: userData.likes || [],
-      minutesListened: userData.minutesListened || 0,
-      tracksPlayed: userData.tracksPlayed || 0
-    };
-    setUser(userWithLikes);
-    setLikedTracks(userWithLikes.likes || []);
-    localStorage.setItem('user', JSON.stringify(userWithLikes));
-    setView('home');
-  };
-
-  const logout = () => {
-    setUser(null);
-    setLikedTracks([]);
-    localStorage.removeItem('user');
-    setView('auth');
-  };
-
   const toggleLike = async (trackId: string) => {
     if (!user) return;
     try {
-      await db.toggleLike(user.id, trackId);
+      await api.toggleLike(user.id, trackId);
       refreshUser();
     } catch (e) {
       console.error('Failed to toggle like', e);

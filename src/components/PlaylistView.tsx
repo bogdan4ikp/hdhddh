@@ -3,6 +3,7 @@ import { Play, Heart, Music, ArrowLeft, Trash2, Clock } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { motion } from 'motion/react';
 import { isFutureRelease } from '../utils/date';
+import { api } from '../services/api';
 
 export default function PlaylistView() {
   const { 
@@ -26,7 +27,7 @@ export default function PlaylistView() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen pb-32">
         <p className="text-neutral-400 mb-4">Плейлист не найден</p>
-        <button onClick={() => setView('library')} className="text-pink-500 hover:underline">Вернуться в медиатеку</button>
+        <button onClick={() => setView('library')} className="text-cyan-500 hover:underline">Вернуться в медиатеку</button>
       </div>
     );
   }
@@ -45,18 +46,16 @@ export default function PlaylistView() {
     if (!confirm('Удалить этот ' + (playlist.type === 'album' ? 'альбом' : 'плейлист') + '?')) return;
     
     try {
-      const res = await fetch(`/api/playlists/${playlist.id}`, { method: 'DELETE' });
-      if (res.ok) {
-        refreshPlaylists();
-        setView('library');
-      }
+      await api.deletePlaylist(playlist.id);
+      refreshPlaylists();
+      setView('library');
     } catch (e) {
       console.error('Failed to delete playlist', e);
     }
   };
 
   return (
-    <div className="flex flex-col min-h-full pb-32">
+    <div className="h-full overflow-y-auto pb-32">
       {/* Header */}
       <div className="relative h-80 w-full overflow-hidden flex items-end p-6 md:p-10">
         <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#121212] z-10"></div>
@@ -85,11 +84,11 @@ export default function PlaylistView() {
           </div>
           <div className="flex-1 min-w-0 pb-2">
             <div className="flex items-center gap-2 mb-2">
-              <p className="text-xs font-bold uppercase tracking-widest text-pink-500">
+              <p className="text-xs font-bold uppercase tracking-widest text-cyan-500">
                 {playlist.type === 'album' ? 'Альбом' : 'Плейлист'}
               </p>
               {isFutureRelease(playlist.releaseDate) && (
-                <span className="text-[10px] font-bold text-white uppercase tracking-wider bg-pink-500/80 px-2 py-0.5 rounded-full border border-pink-500/20 shadow-lg flex items-center gap-1">
+                <span className="text-[10px] font-bold text-white uppercase tracking-wider bg-cyan-500/80 px-2 py-0.5 rounded-full border border-cyan-500/20 shadow-lg flex items-center gap-1">
                   <Clock className="w-3 h-3" />
                   Скоро
                 </span>
@@ -112,7 +111,7 @@ export default function PlaylistView() {
             <button 
               onClick={handlePlayAll}
               disabled={playlistTracks.length === 0 || isFutureRelease(playlist.releaseDate)}
-              className="w-14 h-14 bg-pink-500 text-white rounded-full flex items-center justify-center hover:scale-105 transition-transform shadow-lg shadow-pink-900/20 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
+              className="w-14 h-14 bg-cyan-500 text-white rounded-full flex items-center justify-center hover:scale-105 transition-transform shadow-lg shadow-cyan-900/20 disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
             >
               <Play className="w-6 h-6 fill-current ml-1" />
             </button>
@@ -149,9 +148,9 @@ export default function PlaylistView() {
                     <Clock className="w-4 h-4 mx-auto text-neutral-500" />
                   ) : isActive && isPlaying ? (
                     <div className="flex items-end justify-center gap-0.5 h-4">
-                      <div className="w-1 bg-pink-500 h-full animate-[bounce_1s_infinite]"></div>
-                      <div className="w-1 bg-pink-500 h-2/3 animate-[bounce_1s_infinite_0.2s]"></div>
-                      <div className="w-1 bg-pink-500 h-1/2 animate-[bounce_1s_infinite_0.4s]"></div>
+                      <div className="w-1 bg-cyan-500 h-full animate-[bounce_1s_infinite]"></div>
+                      <div className="w-1 bg-cyan-500 h-2/3 animate-[bounce_1s_infinite_0.2s]"></div>
+                      <div className="w-1 bg-cyan-500 h-1/2 animate-[bounce_1s_infinite_0.4s]"></div>
                     </div>
                   ) : (
                     <span className="group-hover:hidden">{i + 1}</span>
@@ -172,7 +171,7 @@ export default function PlaylistView() {
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <h3 className={`font-medium truncate ${isActive ? 'text-pink-400' : 'text-white'}`}>
+                  <h3 className={`font-medium truncate ${isActive ? 'text-cyan-400' : 'text-white'}`}>
                     {track.title}
                   </h3>
                   <p className="text-neutral-400 text-sm truncate">{track.artist}</p>
@@ -184,7 +183,7 @@ export default function PlaylistView() {
                     onClick={(e) => { e.stopPropagation(); toggleLike(track.id); }}
                     className="p-2 hover:bg-white/10 rounded-full transition-colors"
                   >
-                    <Heart className={`w-5 h-5 ${likedTracks.includes(track.id) ? 'text-pink-500 fill-pink-500' : 'text-neutral-400'}`} />
+                    <Heart className={`w-5 h-5 ${likedTracks.includes(track.id) ? 'text-cyan-500 fill-cyan-500' : 'text-neutral-400'}`} />
                   </motion.button>
                   {user?.id === playlist.authorId && (
                     <button 

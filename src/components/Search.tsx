@@ -40,7 +40,7 @@ export default function Search() {
   }, [allTracks]);
 
   return (
-    <div className={`min-h-full pb-32 px-4 md:px-8 pt-6 ${theme === 'light' ? 'bg-white text-black' : 'bg-[#121212] text-white'}`}>
+    <div className={`h-full overflow-y-auto pb-32 px-4 md:px-8 pt-6 ${theme === 'light' ? 'bg-white text-black' : 'bg-[#121212] text-white'}`}>
       {/* Search Header */}
       <div className="sticky top-0 z-30 pt-2 pb-6 -mx-4 px-4 md:-mx-8 md:px-8 bg-inherit/95 backdrop-blur-xl">
         <div className="flex items-center gap-4 max-w-3xl mx-auto">
@@ -51,7 +51,7 @@ export default function Search() {
             <ArrowLeft className="w-6 h-6" />
           </button>
           <div className="relative flex-1 group">
-            <div className={`absolute inset-0 rounded-2xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-300 bg-gradient-to-r from-${accentColor}-500/20 to-purple-500/20 blur-xl`} />
+            <div className={`absolute inset-0 rounded-2xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-300 bg-gradient-to-r from-${accentColor}-500/20 to-blue-500/20 blur-xl`} />
             <div className={`relative flex items-center ${theme === 'light' ? 'bg-neutral-100' : 'bg-[#1a1a1a]'} rounded-2xl border ${theme === 'light' ? 'border-neutral-200' : 'border-white/5'} focus-within:border-${accentColor}-500/50 transition-colors overflow-hidden`}>
               <SearchIcon className="ml-4 w-5 h-5 text-neutral-400" />
               <input 

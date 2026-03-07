@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Play, Plus, Trash2, Heart, Clock } from 'lucide-react';
 import { useAppContext, Playlist } from '../context/AppContext';
 import { isFutureRelease } from '../utils/date';
+import { api } from '../services/api';
 
 export default function Library() {
   const { user, playlists, allTracks, playTrack, refreshPlaylists, setView, likedTracks, setSelectedPlaylistId } = useAppContext();
@@ -17,30 +18,26 @@ export default function Library() {
     e.preventDefault();
     if (!user || !newTitle) return;
 
-    const formData = new FormData();
-    formData.append('title', newTitle);
-    formData.append('authorId', user.id);
-    formData.append('isPublic', 'false');
-    formData.append('type', 'playlist');
-    formData.append('tracks', JSON.stringify(selectedTracks));
-    
-    if (coverFile) {
-      formData.append('cover', coverFile);
-    }
-
     try {
-      const res = await fetch('/api/playlists', {
-        method: 'POST',
-        body: formData
+      let coverUrl = '';
+      if (coverFile) {
+        coverUrl = await api.uploadFile(coverFile);
+      }
+
+      await api.createPlaylist({
+        title: newTitle,
+        authorId: user.id,
+        isPublic: false,
+        type: 'playlist',
+        tracks: selectedTracks,
+        cover: coverUrl
       });
 
-      if (res.ok) {
-        setIsCreating(false);
-        setNewTitle('');
-        setSelectedTracks([]);
-        setCoverFile(null);
-        refreshPlaylists();
-      }
+      setIsCreating(false);
+      setNewTitle('');
+      setSelectedTracks([]);
+      setCoverFile(null);
+      refreshPlaylists();
     } catch (e) {
       console.error('Failed to create playlist', e);
     }
@@ -50,10 +47,8 @@ export default function Library() {
     if (!confirm('Удалить плейлист?')) return;
     
     try {
-      const res = await fetch(`/api/playlists/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        refreshPlaylists();
-      }
+      await api.deletePlaylist(id);
+      refreshPlaylists();
     } catch (e) {
       console.error('Failed to delete playlist', e);
     }
@@ -66,7 +61,7 @@ export default function Library() {
   };
 
   return (
-    <div className="p-6 pb-32">
+    <div className="h-full overflow-y-auto p-6 pb-32">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold">Медиатека</h1>
         <button 
@@ -83,7 +78,7 @@ export default function Library() {
           <h2 className="text-xl font-bold mb-4">Новый плейлист</h2>
           <form onSubmit={handleCreatePlaylist} className="space-y-4">
             <div className="flex gap-4">
-              <label className={`flex-shrink-0 w-32 h-32 border-2 border-dashed rounded-xl cursor-pointer transition-all overflow-hidden flex flex-col items-center justify-center ${coverFile ? 'border-pink-500 bg-pink-500/5' : 'border-white/10 hover:border-white/20 bg-black/50'}`}>
+              <label className={`flex-shrink-0 w-32 h-32 border-2 border-dashed rounded-xl cursor-pointer transition-all overflow-hidden flex flex-col items-center justify-center ${coverFile ? 'border-cyan-500 bg-cyan-500/5' : 'border-white/10 hover:border-white/20 bg-black/50'}`}>
                 {coverFile ? (
                   <img src={URL.createObjectURL(coverFile)} alt="Preview" className="w-full h-full object-cover" />
                 ) : (
@@ -158,7 +153,7 @@ export default function Library() {
         {/* Favorites Card */}
         <div 
           onClick={() => setView('favorites')}
-          className="bg-gradient-to-br from-indigo-600 to-purple-800 rounded-[2.5rem] p-6 cursor-pointer hover:scale-[1.02] transition-transform group relative aspect-square flex flex-col justify-end overflow-hidden shadow-2xl"
+          className="bg-gradient-to-br from-cyan-600 to-blue-800 rounded-[2.5rem] p-6 cursor-pointer hover:scale-[1.02] transition-transform group relative aspect-square flex flex-col justify-end overflow-hidden shadow-2xl"
         >
           <div className="absolute -top-6 -right-6 w-32 h-32 bg-white/10 backdrop-blur-2xl rounded-full flex items-center justify-center rotate-12 group-hover:scale-110 transition-transform">
             <Heart className="w-12 h-12 text-white/20 fill-white/10" />
@@ -192,7 +187,7 @@ export default function Library() {
               )}
               
               {isFutureRelease(playlist.releaseDate) && (
-                <div className="absolute top-2 left-2 z-10 bg-pink-500/80 backdrop-blur-md px-2 py-1 rounded-lg border border-pink-500/20 flex items-center gap-1.5 shadow-lg">
+                <div className="absolute top-2 left-2 z-10 bg-cyan-500/80 backdrop-blur-md px-2 py-1 rounded-lg border border-cyan-500/20 flex items-center gap-1.5 shadow-lg">
                   <Clock className="w-3 h-3 text-white" />
                   <span className="text-[10px] font-bold text-white uppercase tracking-wider">Скоро</span>
                 </div>
@@ -207,7 +202,7 @@ export default function Library() {
                     if (firstTrack) playTrack(firstTrack);
                   }
                 }}
-                className={`absolute bottom-2 right-2 w-12 h-12 rounded-full flex items-center justify-center text-black opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl hover:scale-105 ${isFutureRelease(playlist.releaseDate) ? 'bg-neutral-600 cursor-not-allowed text-white' : 'bg-green-500 hover:bg-green-400'}`}
+                className={`absolute bottom-2 right-2 w-12 h-12 rounded-full flex items-center justify-center text-black opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl hover:scale-105 ${isFutureRelease(playlist.releaseDate) ? 'bg-neutral-600 cursor-not-allowed text-white' : 'bg-cyan-400 hover:bg-cyan-300'}`}
               >
                 <Play className={`w-6 h-6 ml-1 ${isFutureRelease(playlist.releaseDate) ? 'fill-white' : 'fill-black'}`} />
               </button>

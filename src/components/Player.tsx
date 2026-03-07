@@ -118,7 +118,7 @@ export default function Player() {
             dragConstraints={{ left: 0, right: 0 }}
             dragElastic={0.2}
             onDragEnd={handleDragEnd}
-            className={`fixed bottom-[5.5rem] md:bottom-8 left-2 right-2 md:left-1/2 md:-translate-x-1/2 md:w-[700px] h-20 ${theme === 'light' ? 'bg-white border-black/10 shadow-xl' : 'bg-[#181818] border-white/10 shadow-2xl shadow-black/50'} backdrop-blur-md border rounded-[2rem] flex items-center justify-between px-4 z-50 cursor-pointer hover:scale-[1.01] transition-all overflow-hidden`}
+            className={`fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] md:bottom-8 left-2 right-2 md:left-1/2 md:-translate-x-1/2 md:w-[700px] h-20 ${theme === 'light' ? 'bg-white border-black/10 shadow-xl' : 'bg-[#181818] border-white/10 shadow-2xl shadow-black/50'} backdrop-blur-md border rounded-[2rem] flex items-center justify-between px-4 z-50 cursor-pointer hover:scale-[1.01] transition-all overflow-hidden`}
             onClick={() => setIsPlayerExpanded(true)}
           >
             {/* Track Info */}
@@ -145,7 +145,7 @@ export default function Player() {
             <div className="flex items-center gap-3 relative z-10">
               <button 
                 onClick={handleLikeClick}
-                className="p-3 text-neutral-400 hover:text-pink-500 transition-colors rounded-full hover:bg-white/5 relative"
+                className="p-3 text-neutral-400 hover:text-cyan-500 transition-colors rounded-full hover:bg-white/5 relative"
               >
                 <AnimatePresence>
                   {isLiking && (
@@ -156,16 +156,16 @@ export default function Player() {
                       transition={{ duration: 0.5, ease: "easeOut" }}
                       className="absolute inset-0 flex items-center justify-center pointer-events-none"
                     >
-                      <Heart className="w-6 h-6 text-pink-500 fill-pink-500" />
+                      <Heart className="w-6 h-6 text-cyan-500 fill-cyan-500" />
                     </motion.div>
                   )}
                 </AnimatePresence>
-                <Heart className={`w-6 h-6 transition-all ${currentTrack && likedTracks.includes(currentTrack.id) ? 'fill-pink-500 text-pink-500 scale-110' : ''}`} />
+                <Heart className={`w-6 h-6 transition-all ${currentTrack && likedTracks.includes(currentTrack.id) ? 'fill-cyan-500 text-cyan-500 scale-110' : ''}`} />
               </button>
               
               <button 
                 onClick={handlePlayPause}
-                className={`w-12 h-12 flex items-center justify-center rounded-full ${theme === 'light' ? 'bg-black text-white' : 'bg-white text-black'} hover:scale-105 transition-transform shadow-lg`}
+                className={`w-12 h-12 flex items-center justify-center rounded-full bg-cyan-500 text-white hover:scale-105 transition-transform shadow-lg shadow-cyan-500/20`}
               >
                 {isPlaying ? (
                   <Pause className="w-6 h-6 fill-current" />

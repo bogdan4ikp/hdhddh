@@ -1,365 +1,250 @@
 import React from 'react';
-import { Search, Settings2, User, Play, Pause, Heart, Music, ArrowDown, Disc3, Trash2, Clock } from 'lucide-react';
+import { Search, Settings2, User, Play, Pause, Heart, Music, Disc3, Clock, ChevronRight, TrendingUp } from 'lucide-react';
 import { useAppContext, Track } from '../context/AppContext';
 import { isFutureRelease } from '../utils/date';
 
 export default function MainContent() {
-  const { user, setView, theme, allTracks, currentTrack, isPlaying, togglePlay, playTrack, likedTracks, toggleLike, playlists, setSelectedPlaylistId, refreshTracks } = useAppContext();
+  const { user, setView, theme, allTracks, currentTrack, isPlaying, togglePlay, playTrack, likedTracks, toggleLike, playlists, setSelectedPlaylistId } = useAppContext();
   
-  // Format numbers with commas/spaces
-  const formatNumber = (num: number) => {
-    return new Intl.NumberFormat('ru-RU').format(num);
-  };
-
   // Filter only user uploaded tracks for "My Tracks"
   const myTracks = allTracks.filter(t => t.uploaderId === user?.id);
   
   // Get public albums
   const publicAlbums = playlists.filter(p => p.type === 'album' && p.isPublic);
 
-  const handleDeleteTrack = async (trackId: string) => {
-    if (!confirm('Удалить этот трек?')) return;
-    try {
-      const res = await fetch(`/api/tracks/${trackId}`, { method: 'DELETE' });
-      if (res.ok) {
-        refreshTracks();
-      }
-    } catch (e) {
-      console.error('Failed to delete track', e);
-    }
+  // Top charts
+  const topTracks = [...allTracks].sort((a, b) => (b.plays || 0) - (a.plays || 0)).slice(0, 10);
+
+  const greeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Доброе утро';
+    if (hour < 18) return 'Добрый день';
+    return 'Добрый вечер';
   };
 
   return (
-    <div className={`relative h-full overflow-hidden flex flex-col ${theme === 'light' ? 'bg-white' : 'bg-[#121212]'}`}>
-      <style>{`
-        @keyframes float-1 {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          25% { transform: translate(100px, -50px) scale(1.4); }
-          50% { transform: translate(50px, 100px) scale(0.9); }
-          75% { transform: translate(-50px, 50px) scale(1.2); }
-        }
-        @keyframes float-2 {
-          0%, 100% { transform: translate(0, 0) scale(1.2); }
-          33% { transform: translate(-100px, 80px) scale(0.8); }
-          66% { transform: translate(80px, -80px) scale(1.5); }
-        }
-        @keyframes float-3 {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          50% { transform: translate(60px, -40px) scale(1.4); }
-        }
-        @keyframes pulse-glow {
-          0%, 100% { opacity: 0.6; }
-          50% { opacity: 0.8; }
-        }
-        .blob-1 { animation: float-1 15s infinite ease-in-out alternate, pulse-glow 8s infinite ease-in-out; }
-        .blob-2 { animation: float-2 20s infinite ease-in-out alternate, pulse-glow 10s infinite ease-in-out; }
-        .blob-3 { animation: float-3 12s infinite ease-in-out alternate, pulse-glow 6s infinite ease-in-out; }
-      `}</style>
-      
-      {/* Full Screen Fixed Animated Background - Optimized */}
+    <div className={`relative h-full flex flex-col ${theme === 'light' ? 'bg-[#f2f2f7]' : 'bg-[#000000]'}`}>
+      {/* Optimized Background */}
       <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
-        <div className="absolute inset-0 bg-[#121212]">
-          <div className="absolute -top-[20%] -left-[20%] w-[80%] h-[80%] bg-[#FF7A00] rounded-full blur-[100px] opacity-60 blob-1 will-change-transform mix-blend-screen" />
-          <div className="absolute top-[20%] -right-[20%] w-[90%] h-[90%] bg-[#FF006E] rounded-full blur-[120px] opacity-60 blob-2 will-change-transform mix-blend-screen" />
-          <div className="absolute bottom-[-10%] left-[10%] w-[70%] h-[70%] bg-[#FF0000] rounded-full blur-[110px] opacity-50 blob-3 will-change-transform mix-blend-screen" />
-        </div>
-        {/* Dark vignette effect around the edges */}
-        <div className="absolute inset-0 shadow-[inset_0_0_150px_rgba(0,0,0,0.9)] mix-blend-multiply pointer-events-none"></div>
+        <div className="absolute inset-0 bg-gradient-to-br from-cyan-900/30 via-blue-900/20 to-black/0" />
+        <div className={`absolute top-[-20%] right-[-10%] w-[60%] h-[60%] rounded-full blur-[100px] opacity-30 ${theme === 'light' ? 'bg-cyan-400' : 'bg-cyan-600'}`} />
+        <div className={`absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full blur-[100px] opacity-30 ${theme === 'light' ? 'bg-blue-400' : 'bg-blue-600'}`} />
       </div>
 
-      {/* Scrollable Content Container */}
-      <div className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar pb-24 scroll-smooth">
+      {/* Scrollable Content */}
+      <div className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden pb-32 safe-top">
         
-        {/* Slide 1: Stats (Full Screen) */}
-        <div className="min-h-[90vh] flex flex-col px-4 md:px-8 pt-6 relative">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-8">
-            {user ? (
-              <div 
-                onClick={() => setView('profile')}
-                className="w-10 h-10 rounded-full bg-white/10 border-white/10 border flex items-center justify-center overflow-hidden cursor-pointer hover:bg-white/20 transition-colors backdrop-blur-md"
-              >
-                {user.avatar ? (
-                  <img src={user.avatar} alt="Profile" className="w-full h-full object-cover" />
-                ) : (
-                  <User className="w-5 h-5 text-white" />
-                )}
-              </div>
-            ) : <div className="w-10 h-10"></div>}
+        {/* Header */}
+        <div className="px-6 pt-8 pb-6 flex items-center justify-between sticky top-0 z-20 backdrop-blur-xl bg-inherit/80">
+          <div>
+            <h1 className={`text-2xl font-bold tracking-tight ${theme === 'light' ? 'text-black' : 'text-white'}`}>
+              {greeting()}
+            </h1>
+            <p className={`text-sm font-medium ${theme === 'light' ? 'text-neutral-500' : 'text-neutral-400'}`}>
+              {user?.username || 'Гость'}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setView('search')}
+              className={`p-2.5 rounded-full ${theme === 'light' ? 'bg-white text-black shadow-sm' : 'bg-white/10 text-white'} hover:scale-105 transition-transform`}
+            >
+              <Search className="w-5 h-5" />
+            </button>
+            <button 
+              onClick={() => setView('profile')}
+              className="w-10 h-10 rounded-full overflow-hidden border-2 border-transparent hover:border-cyan-400 transition-colors"
+            >
+              {user?.avatar ? (
+                <img src={user.avatar} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                <div className={`w-full h-full flex items-center justify-center ${theme === 'light' ? 'bg-neutral-200' : 'bg-neutral-800'}`}>
+                  <User className="w-5 h-5 text-neutral-500" />
+                </div>
+              )}
+            </button>
+          </div>
+        </div>
 
-            <div className="flex items-center gap-2 backdrop-blur-md px-4 py-2 rounded-full bg-white/5 border border-white/5">
-              <span className="text-xl font-bold tracking-tight text-white">Vibe</span>
-              <div className="w-5 h-5 text-pink-500">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z" />
-                </svg>
+        {/* Stats Section */}
+        <div className="px-6 mb-8">
+          <div className="grid grid-cols-2 gap-4">
+            <div className={`p-4 rounded-2xl ${theme === 'light' ? 'bg-white shadow-sm' : 'bg-white/5 border border-white/5'}`}>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 rounded-full bg-cyan-500/20 text-cyan-400">
+                  <Music className="w-5 h-5" />
+                </div>
+                <span className={`text-sm font-medium ${theme === 'light' ? 'text-neutral-500' : 'text-neutral-400'}`}>Треков</span>
               </div>
-              <span className="text-xl font-bold tracking-tight text-white">Music</span>
+              <p className={`text-2xl font-bold ${theme === 'light' ? 'text-black' : 'text-white'}`}>
+                {user?.tracksPlayed || 0}
+              </p>
             </div>
-
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => setView('search')}
-                className="w-10 h-10 flex items-center justify-center hover:bg-white/10 rounded-full transition-colors backdrop-blur-md text-white"
-              >
-                <Search className="w-6 h-6" />
-              </button>
+            <div className={`p-4 rounded-2xl ${theme === 'light' ? 'bg-white shadow-sm' : 'bg-white/5 border border-white/5'}`}>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 rounded-full bg-blue-500/20 text-blue-400">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <span className={`text-sm font-medium ${theme === 'light' ? 'text-neutral-500' : 'text-neutral-400'}`}>Минут</span>
+              </div>
+              <p className={`text-2xl font-bold ${theme === 'light' ? 'text-black' : 'text-white'}`}>
+                {user?.minutesListened || 0}
+              </p>
             </div>
           </div>
+        </div>
 
-          {/* Stats Content */}
-          <div className="flex-1 flex flex-col justify-center text-white font-sans pb-20">
-            <div className="w-full max-w-md space-y-12">
-              <div className="space-y-10 text-left">
-                <div>
-                  <h3 className="text-lg font-medium opacity-90 mb-2 uppercase tracking-widest">Прослушано в этом году</h3>
-                  <div className="text-6xl md:text-7xl font-black tracking-tighter leading-none drop-shadow-2xl">
-                    {formatNumber(user?.tracksPlayed || 0)}
+        {/* Horizontal Scroll: New Albums */}
+        {publicAlbums.length > 0 && (
+          <div className="mb-8">
+            <div className="px-6 mb-4 flex items-center justify-between">
+              <h2 className={`text-xl font-bold ${theme === 'light' ? 'text-black' : 'text-white'}`}>Новые альбомы</h2>
+              <button className="text-xs font-bold text-cyan-400 uppercase tracking-wider">Все</button>
+            </div>
+            
+            <div className="flex overflow-x-auto px-6 gap-4 pb-4 snap-x scrollbar-hide">
+              {publicAlbums.map(album => (
+                <div 
+                  key={album.id} 
+                  className="flex-shrink-0 w-40 snap-start group cursor-pointer"
+                  onClick={() => {
+                    setSelectedPlaylistId(album.id);
+                    setView('playlist');
+                  }}
+                >
+                  <div className="aspect-square rounded-2xl overflow-hidden mb-3 relative shadow-lg bg-neutral-800">
+                    {album.cover ? (
+                      <img src={album.cover} alt={album.title} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-neutral-800">
+                        <Disc3 className="w-10 h-10 text-neutral-600" />
+                      </div>
+                    )}
+                    {isFutureRelease(album.releaseDate) && (
+                      <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md px-2 py-1 rounded-lg border border-white/10 flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-white" />
+                        <span className="text-[10px] font-bold text-white uppercase">Скоро</span>
+                      </div>
+                    )}
                   </div>
+                  <h3 className={`font-bold text-sm truncate ${theme === 'light' ? 'text-black' : 'text-white'}`}>{album.title}</h3>
+                  <p className="text-xs text-neutral-500 truncate">{album.tracks.length} треков</p>
                 </div>
+              ))}
+            </div>
+          </div>
+        )}
 
-                <div>
-                  <h3 className="text-lg font-medium opacity-90 mb-2 uppercase tracking-widest">Минут музыки</h3>
-                  <div className="text-6xl md:text-7xl font-black tracking-tighter leading-none drop-shadow-2xl">
-                    {formatNumber(user?.minutesListened || 0)}
+        {/* Horizontal Scroll: My Tracks (Quick Access) */}
+        {myTracks.length > 0 && (
+          <div className="mb-8">
+            <div className="px-6 mb-4 flex items-center justify-between">
+              <h2 className={`text-xl font-bold ${theme === 'light' ? 'text-black' : 'text-white'}`}>Мои треки</h2>
+            </div>
+            <div className="flex overflow-x-auto px-6 gap-3 pb-4 snap-x scrollbar-hide">
+              {myTracks.slice(0, 6).map(track => (
+                <div 
+                  key={track.id}
+                  onClick={() => {
+                    if (isFutureRelease(track.releaseDate)) return;
+                    currentTrack?.id === track.id && isPlaying ? togglePlay() : playTrack(track)
+                  }}
+                  className={`flex-shrink-0 w-64 p-3 rounded-2xl flex items-center gap-3 snap-start cursor-pointer transition-colors ${theme === 'light' ? 'bg-white shadow-sm' : 'bg-white/5 border border-white/5'}`}
+                >
+                  <div className="w-12 h-12 rounded-xl bg-neutral-800 overflow-hidden relative flex-shrink-0">
+                    {track.cover ? (
+                      <img src={track.cover} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Music className="w-5 h-5 text-neutral-500" />
+                      </div>
+                    )}
+                    {currentTrack?.id === track.id && isPlaying && (
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                        <div className="flex items-end gap-0.5 h-3">
+                          <div className="w-1 bg-cyan-400 h-full animate-bounce" />
+                          <div className="w-1 bg-cyan-400 h-2/3 animate-bounce delay-75" />
+                          <div className="w-1 bg-cyan-400 h-1/2 animate-bounce delay-150" />
+                        </div>
+                      </div>
+                    )}
                   </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className={`font-bold text-sm truncate ${theme === 'light' ? 'text-black' : 'text-white'}`}>{track.title}</h3>
+                    <p className="text-xs text-neutral-500 truncate">{track.artist}</p>
+                  </div>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); toggleLike(track.id); }}
+                    className={`p-2 rounded-full ${likedTracks.includes(track.id) ? 'text-cyan-500' : 'text-neutral-400'}`}
+                  >
+                    <Heart className={`w-4 h-4 ${likedTracks.includes(track.id) ? 'fill-current' : ''}`} />
+                  </button>
                 </div>
-              </div>
+              ))}
+            </div>
+          </div>
+        )}
 
-              <div className="grid grid-cols-2 gap-8 pt-10 border-t border-white/20">
-                <div className="text-left">
-                  <h3 className="text-sm font-bold opacity-80 mb-4 uppercase tracking-widest">Топ города</h3>
-                  {myTracks.length > 0 && (user?.tracksPlayed || 0) > 0 ? (
-                    <div className="space-y-1 text-2xl font-black leading-tight uppercase tracking-tight">
-                      <div>MOSCOW</div>
-                      <div>ST. PETERSBURG</div>
-                      <div>YEKATERINBURG</div>
-                    </div>
+        {/* Vertical List: Top Chart */}
+        <div className="px-6">
+          <div className="mb-4 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-cyan-400" />
+            <h2 className={`text-xl font-bold ${theme === 'light' ? 'text-black' : 'text-white'}`}>Топ чарт</h2>
+          </div>
+          
+          <div className="space-y-1">
+            {topTracks.length > 0 ? topTracks.map((track, index) => (
+              <div 
+                key={track.id}
+                onClick={() => {
+                  if (isFutureRelease(track.releaseDate)) return;
+                  currentTrack?.id === track.id && isPlaying ? togglePlay() : playTrack(track)
+                }}
+                className={`group flex items-center gap-4 p-3 rounded-2xl transition-all cursor-pointer ${theme === 'light' ? 'hover:bg-white active:scale-[0.99]' : 'hover:bg-white/5 active:scale-[0.99]'}`}
+              >
+                <div className={`w-6 text-center font-bold text-sm ${index < 3 ? 'text-cyan-400' : 'text-neutral-500'}`}>
+                  {index + 1}
+                </div>
+                
+                <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-neutral-800 flex-shrink-0 shadow-sm">
+                  {track.cover ? (
+                    <img src={track.cover} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <div className="text-white/40 text-sm font-medium">
-                      Загрузите треки и начните слушать, чтобы увидеть статистику по городам.
+                    <div className="w-full h-full flex items-center justify-center bg-neutral-700">
+                      <Music className="w-5 h-5 text-neutral-500" />
                     </div>
                   )}
                 </div>
-                <div className="text-left">
-                  <h3 className="text-sm font-bold opacity-80 mb-4 uppercase tracking-widest">Топ жанры</h3>
-                  <div className="space-y-1 text-2xl font-black leading-tight uppercase tracking-tight">
-                    <div>HIP-HOP</div>
-                    <div>POP</div>
-                    <div>ELECTRONIC</div>
+
+                <div className="flex-1 min-w-0">
+                  <h3 className={`font-bold text-base truncate ${currentTrack?.id === track.id ? 'text-cyan-400' : (theme === 'light' ? 'text-black' : 'text-white')}`}>
+                    {track.title}
+                  </h3>
+                  <p className="text-sm text-neutral-500 truncate font-medium">{track.artist}</p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="text-xs font-medium text-neutral-500 flex items-center gap-1">
+                    <Play className="w-3 h-3 fill-current" />
+                    {track.plays || 0}
                   </div>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); toggleLike(track.id); }}
+                    className={`p-2 rounded-full ${likedTracks.includes(track.id) ? 'text-cyan-500' : 'text-neutral-400'}`}
+                  >
+                    <Heart className={`w-5 h-5 ${likedTracks.includes(track.id) ? 'fill-current' : ''}`} />
+                  </button>
                 </div>
               </div>
-            </div>
-          </div>
-          
-          {/* Scroll Indicator */}
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce opacity-50">
-            <ArrowDown className="w-8 h-8 text-white" />
-          </div>
-        </div>
-
-        {/* Content Below Slide */}
-        <div className="px-4 md:px-8 pb-10">
-          
-          {/* Albums Section */}
-          {publicAlbums.length > 0 && (
-            <div className="mb-16 pt-10">
-              <h2 className="text-3xl font-bold text-white mb-8 px-2 tracking-tight">Новые альбомы</h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-                {publicAlbums.map(album => (
-                  <div 
-                    key={album.id} 
-                    className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4 group relative hover:bg-white/10 transition-colors cursor-pointer"
-                    onClick={() => {
-                      setSelectedPlaylistId(album.id);
-                      setView('playlist');
-                    }}
-                  >
-                    <div className="absolute top-2 right-2 z-10 bg-black/50 backdrop-blur-md px-2 py-1 rounded-lg border border-white/10 flex items-center gap-1.5">
-                      <Disc3 className="w-3 h-3 text-pink-500" />
-                      <span className="text-[10px] font-bold text-white uppercase tracking-wider">Альбом</span>
-                    </div>
-                    {isFutureRelease(album.releaseDate) && (
-                      <div className="absolute top-2 left-2 z-10 bg-pink-500/80 backdrop-blur-md px-2 py-1 rounded-lg border border-pink-500/20 flex items-center gap-1.5 shadow-lg">
-                        <Clock className="w-3 h-3 text-white" />
-                        <span className="text-[10px] font-bold text-white uppercase tracking-wider">Скоро</span>
-                      </div>
-                    )}
-                    <div className="aspect-square bg-neutral-800 rounded-xl mb-4 overflow-hidden relative shadow-lg">
-                      {album.cover ? (
-                        <img src={album.cover} alt={album.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neutral-700 to-neutral-900">
-                          <Disc3 className="w-12 h-12 text-neutral-500" />
-                        </div>
-                      )}
-                      
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isFutureRelease(album.releaseDate)) return;
-                          if (album.tracks.length > 0) {
-                            const firstTrack = allTracks.find(t => t.id === album.tracks[0]);
-                            if (firstTrack) playTrack(firstTrack);
-                          }
-                        }}
-                        className={`absolute bottom-2 right-2 w-12 h-12 rounded-full flex items-center justify-center text-white opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl hover:scale-105 ${isFutureRelease(album.releaseDate) ? 'bg-neutral-600 cursor-not-allowed' : 'bg-pink-500 hover:bg-pink-400'}`}
-                      >
-                        <Play className="w-6 h-6 fill-white ml-1" />
-                      </button>
-                    </div>
-                    
-                    <div className="min-w-0">
-                      <h3 className="font-bold text-white truncate text-lg">{album.title}</h3>
-                      <p className="text-sm text-neutral-400 truncate mt-1">
-                        {album.tracks.length} треков
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* My Tracks Section */}
-          {myTracks.length > 0 && (
-            <div className="mb-16 pt-10">
-              <h2 className="text-3xl font-bold text-white mb-8 px-2 tracking-tight">Мои треки</h2>
-              <div className="space-y-3">
-                {myTracks.map((track) => (
-                  <div 
-                    key={track.id}
-                    className="group flex items-center gap-4 p-4 rounded-3xl hover:bg-white/10 transition-all backdrop-blur-md border border-white/5 hover:border-white/10"
-                  >
-                    <div className="relative w-16 h-16 rounded-2xl overflow-hidden bg-neutral-800 flex-shrink-0 shadow-lg">
-                      {track.cover ? (
-                        <img src={track.cover} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-white/10">
-                          <Music className="w-8 h-8 text-white/50" />
-                        </div>
-                      )}
-                      <button 
-                        onClick={() => {
-                          if (isFutureRelease(track.releaseDate)) return;
-                          currentTrack?.id === track.id && isPlaying ? togglePlay() : playTrack(track)
-                        }}
-                        className={`absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity ${isFutureRelease(track.releaseDate) ? 'cursor-not-allowed' : ''}`}
-                      >
-                        {isFutureRelease(track.releaseDate) ? (
-                          <Clock className="w-8 h-8 text-white" />
-                        ) : currentTrack?.id === track.id && isPlaying ? (
-                          <Pause className="w-8 h-8 text-white fill-current" />
-                        ) : (
-                          <Play className="w-8 h-8 text-white fill-current ml-1" />
-                        )}
-                      </button>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className={`text-lg font-bold truncate ${currentTrack?.id === track.id ? 'text-pink-500' : 'text-white'}`}>
-                          {track.title}
-                        </h3>
-                        {isFutureRelease(track.releaseDate) && (
-                          <span className="text-[10px] font-bold text-pink-500 uppercase tracking-wider bg-pink-500/10 px-2 py-0.5 rounded-full border border-pink-500/20">
-                            Скоро
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-base text-neutral-400 truncate font-medium">{track.artist}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => toggleLike(track.id)}
-                        className={`p-3 rounded-full transition-colors ${likedTracks.includes(track.id) ? 'text-pink-500' : 'text-neutral-500 hover:text-white'}`}
-                      >
-                        <Heart className={`w-6 h-6 ${likedTracks.includes(track.id) ? 'fill-current' : ''}`} />
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteTrack(track.id)}
-                        className="p-3 text-neutral-500 hover:text-red-500 hover:bg-white/5 rounded-full transition-colors"
-                        title="Удалить трек"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Top Chart Section */}
-          <div className="mb-8 pt-4">
-            <h2 className="text-3xl font-bold text-white mb-8 px-2 tracking-tight">Топ чарт</h2>
-            {allTracks.length > 0 ? (
-              <div className="space-y-3">
-                {[...allTracks].sort((a, b) => (b.plays || 0) - (a.plays || 0)).slice(0, 10).map((track, index) => (
-                  <div 
-                    key={track.id}
-                    className="group flex items-center gap-4 p-4 rounded-3xl hover:bg-white/10 transition-all backdrop-blur-md border border-white/5 hover:border-white/10"
-                  >
-                    <div className="w-8 text-center font-black text-xl text-white/50">{index + 1}</div>
-                    <div className="relative w-16 h-16 rounded-2xl overflow-hidden bg-neutral-800 flex-shrink-0 shadow-lg">
-                      {track.cover ? (
-                        <img src={track.cover} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-white/10">
-                          <Music className="w-8 h-8 text-white/50" />
-                        </div>
-                      )}
-                      <button 
-                        onClick={() => {
-                          if (isFutureRelease(track.releaseDate)) return;
-                          currentTrack?.id === track.id && isPlaying ? togglePlay() : playTrack(track)
-                        }}
-                        className={`absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity ${isFutureRelease(track.releaseDate) ? 'cursor-not-allowed' : ''}`}
-                      >
-                        {isFutureRelease(track.releaseDate) ? (
-                          <Clock className="w-8 h-8 text-white" />
-                        ) : currentTrack?.id === track.id && isPlaying ? (
-                          <Pause className="w-8 h-8 text-white fill-current" />
-                        ) : (
-                          <Play className="w-8 h-8 text-white fill-current ml-1" />
-                        )}
-                      </button>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className={`text-lg font-bold truncate ${currentTrack?.id === track.id ? 'text-pink-500' : 'text-white'}`}>
-                          {track.title}
-                        </h3>
-                        {isFutureRelease(track.releaseDate) && (
-                          <span className="text-[10px] font-bold text-pink-500 uppercase tracking-wider bg-pink-500/10 px-2 py-0.5 rounded-full border border-pink-500/20">
-                            Скоро
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-base text-neutral-400 truncate font-medium">{track.artist}</p>
-                    </div>
-                    <div className="text-sm font-bold text-neutral-500 mr-4 flex items-center gap-1">
-                      <Play className="w-3 h-3 fill-current" />
-                      {track.plays || 0}
-                    </div>
-                    <button 
-                      onClick={() => toggleLike(track.id)}
-                      className={`p-3 rounded-full transition-colors ${likedTracks.includes(track.id) ? 'text-pink-500' : 'text-neutral-500 hover:text-white'}`}
-                    >
-                      <Heart className={`w-6 h-6 ${likedTracks.includes(track.id) ? 'fill-current' : ''}`} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-12 px-4 rounded-3xl bg-white/5 border border-white/5 backdrop-blur-sm">
-                <Music className="w-12 h-12 text-white/20 mb-4" />
-                <p className="text-white/40 text-lg font-medium">Список пуст</p>
+            )) : (
+              <div className="py-10 text-center text-neutral-500">
+                <Music className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                <p>Чарт пока пуст</p>
               </div>
             )}
           </div>
-
         </div>
+
       </div>
     </div>
   );

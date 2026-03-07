@@ -15,7 +15,7 @@ export default function Favorites() {
   };
 
   return (
-    <div className="flex flex-col min-h-full pb-32">
+    <div className="h-full overflow-y-auto pb-32">
       <div className="px-2 md:px-6 py-8">
         {/* Header Section */}
         <section className="mb-10">

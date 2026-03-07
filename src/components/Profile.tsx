@@ -14,12 +14,12 @@ export default function Profile() {
   if (!user) return null;
 
   const accentColors = [
-    { id: 'pink', color: 'bg-pink-500' },
-    { id: 'purple', color: 'bg-purple-500' },
+    { id: 'cyan', color: 'bg-cyan-500' },
+    { id: 'sky', color: 'bg-sky-500' },
     { id: 'blue', color: 'bg-blue-500' },
-    { id: 'green', color: 'bg-emerald-500' },
-    { id: 'orange', color: 'bg-orange-500' },
-    { id: 'red', color: 'bg-red-500' },
+    { id: 'indigo', color: 'bg-indigo-500' },
+    { id: 'purple', color: 'bg-purple-500' },
+    { id: 'pink', color: 'bg-pink-500' },
   ];
 
   const userTracks = allTracks.filter(t => t.uploaderId === user.id);
@@ -60,13 +60,13 @@ export default function Profile() {
   };
 
   return (
-    <div className="pb-32">
+    <div className="h-full overflow-y-auto pb-32">
       {/* Cover Image */}
       <div className="relative h-64 md:h-80 w-full bg-neutral-800 group">
         {user.cover ? (
           <img src={user.cover} alt="Cover" className="w-full h-full object-cover" />
         ) : (
-          <div className="w-full h-full bg-gradient-to-b from-purple-900 to-[#121212]"></div>
+          <div className="w-full h-full bg-gradient-to-b from-sky-900 to-[#121212]"></div>
         )}
         
         <button 
@@ -94,7 +94,7 @@ export default function Profile() {
               {user.avatar ? (
                 <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center bg-purple-600 text-4xl font-bold text-white">
+                <div className="w-full h-full flex items-center justify-center bg-cyan-600 text-4xl font-bold text-white">
                   {user.username[0].toUpperCase()}
                 </div>
               )}
@@ -197,7 +197,7 @@ export default function Profile() {
             <h2 className={`text-xl font-bold ${theme === 'light' ? 'text-black' : 'text-white'}`}>Мои треки</h2>
             <button 
               onClick={() => setView('studio')}
-              className="text-purple-400 hover:text-purple-300 text-sm font-medium flex items-center gap-1"
+              className="text-cyan-400 hover:text-cyan-300 text-sm font-medium flex items-center gap-1"
             >
               <Plus className="w-4 h-4" />
               Управлять в Студии
@@ -217,7 +217,7 @@ export default function Profile() {
                   }}
                   className={`flex items-center gap-4 p-3 rounded-xl hover:bg-black/5 transition-colors group cursor-pointer ${isActive ? 'bg-black/5' : ''} ${isFutureRelease(track.releaseDate) ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''}`}
                 >
-                  <span className={`w-6 text-center font-mono text-sm ${isActive ? 'text-purple-500' : 'text-neutral-500'}`}>
+                  <span className={`w-6 text-center font-mono text-sm ${isActive ? 'text-cyan-500' : 'text-neutral-500'}`}>
                     {isFutureRelease(track.releaseDate) ? <Clock className="w-4 h-4 mx-auto" /> : i + 1}
                   </span>
                   <div className="w-12 h-12 bg-neutral-800 rounded-lg overflow-hidden relative">
@@ -230,13 +230,13 @@ export default function Profile() {
                     )}
                     {isActive && isPlaying && !isFutureRelease(track.releaseDate) && (
                       <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                        <div className="w-3 h-3 bg-purple-500 rounded-full animate-pulse" />
+                        <div className="w-3 h-3 bg-cyan-500 rounded-full animate-pulse" />
                       </div>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <h3 className={`font-medium truncate ${isActive ? 'text-purple-500' : 'text-white'}`}>{track.title}</h3>
+                      <h3 className={`font-medium truncate ${isActive ? 'text-cyan-500' : 'text-white'}`}>{track.title}</h3>
                       {isFutureRelease(track.releaseDate) && (
                         <span className="text-[10px] font-bold text-pink-500 uppercase tracking-wider bg-pink-500/10 px-2 py-0.5 rounded-full border border-pink-500/20">
                           Скоро

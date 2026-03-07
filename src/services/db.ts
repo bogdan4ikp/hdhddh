@@ -13,49 +13,121 @@ export const readFileAsBase64 = (file: File): Promise<string> => {
   });
 };
 
+const DB_NAME = 'MusicAppDB';
+const DB_VERSION = 1;
+
 class LocalDB {
-  private delay = 500; // Simulate network delay
+  private db: IDBDatabase | null = null;
+  private initPromise: Promise<void>;
 
   constructor() {
-    this.init();
+    this.initPromise = this.init();
   }
 
-  private init() {
-    if (!localStorage.getItem('users')) {
-      localStorage.setItem('users', JSON.stringify([]));
-    }
-    if (!localStorage.getItem('tracks')) {
-      // Initialize with empty tracks
-      localStorage.setItem('tracks', JSON.stringify([]));
-    }
-    if (!localStorage.getItem('playlists')) {
-      localStorage.setItem('playlists', JSON.stringify([]));
-    }
+  private init(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+      request.onerror = () => {
+        console.error('Database error:', request.error);
+        reject(request.error);
+      };
+
+      request.onsuccess = (event) => {
+        this.db = (event.target as IDBOpenDBRequest).result;
+        resolve();
+      };
+
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result;
+        
+        // Users Store
+        if (!db.objectStoreNames.contains('users')) {
+          const userStore = db.createObjectStore('users', { keyPath: 'id' });
+          userStore.createIndex('username', 'username', { unique: true });
+        }
+
+        // Tracks Store
+        if (!db.objectStoreNames.contains('tracks')) {
+          const trackStore = db.createObjectStore('tracks', { keyPath: 'id' });
+          trackStore.createIndex('uploaderId', 'uploaderId', { unique: false });
+        }
+
+        // Playlists Store
+        if (!db.objectStoreNames.contains('playlists')) {
+          db.createObjectStore('playlists', { keyPath: 'id' });
+        }
+      };
+    });
   }
 
-  private async simulateDelay() {
-    return new Promise(resolve => setTimeout(resolve, this.delay));
+  private async getDB(): Promise<IDBDatabase> {
+    await this.initPromise;
+    if (!this.db) throw new Error('Database not initialized');
+    return this.db;
+  }
+
+  private transaction<T>(storeName: string, mode: IDBTransactionMode, callback: (store: IDBObjectStore) => IDBRequest<T> | void): Promise<T> {
+    return this.getDB().then(db => {
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(storeName, mode);
+        const store = transaction.objectStore(storeName);
+        
+        let request: IDBRequest<T> | void;
+        try {
+          request = callback(store);
+        } catch (e) {
+          reject(e);
+          return;
+        }
+
+        if (request) {
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        } else {
+          transaction.oncomplete = () => resolve(undefined as unknown as T);
+          transaction.onerror = () => reject(transaction.error);
+        }
+      });
+    });
   }
 
   // Auth
   async login(username: string, password: string): Promise<User> {
-    await this.simulateDelay();
-    const users: any[] = JSON.parse(localStorage.getItem('users') || '[]');
-    const user = users.find(u => u.username === username && u.password === password);
-    
-    if (!user) {
-      throw new Error('Неверное имя пользователя или пароль');
-    }
-    
-    const { password: _, ...userData } = user;
-    return userData;
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction('users', 'readonly');
+      const store = transaction.objectStore('users');
+      const index = store.index('username');
+      const request = index.get(username);
+
+      request.onsuccess = () => {
+        const user = request.result;
+        if (user && user.password === password) {
+          const { password: _, ...userData } = user;
+          resolve(userData);
+        } else {
+          reject(new Error('Неверное имя пользователя или пароль'));
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
   }
 
   async register(username: string, password: string): Promise<User> {
-    await this.simulateDelay();
-    const users: any[] = JSON.parse(localStorage.getItem('users') || '[]');
+    const db = await this.getDB();
     
-    if (users.find(u => u.username === username)) {
+    // Check if user exists
+    const exists = await new Promise<boolean>((resolve, reject) => {
+      const transaction = db.transaction('users', 'readonly');
+      const store = transaction.objectStore('users');
+      const index = store.index('username');
+      const request = index.get(username);
+      request.onsuccess = () => resolve(!!request.result);
+      request.onerror = () => reject(request.error);
+    });
+
+    if (exists) {
       throw new Error('Пользователь уже существует');
     }
 
@@ -72,32 +144,22 @@ class LocalDB {
       createdAt: new Date().toISOString()
     };
 
-    users.push(newUser);
-    localStorage.setItem('users', JSON.stringify(users));
+    await this.transaction('users', 'readwrite', store => store.add(newUser));
 
     const { password: _, ...userData } = newUser;
     return userData;
   }
 
   async getUser(id: string): Promise<User | null> {
-    await this.simulateDelay();
-    const users: any[] = JSON.parse(localStorage.getItem('users') || '[]');
-    const user = users.find(u => u.id === id);
-    if (!user) return null;
-    const { password: _, ...userData } = user;
-    return userData;
+    return this.transaction('users', 'readonly', store => store.get(id));
   }
 
   // Tracks
   async getTracks(): Promise<Track[]> {
-    await this.simulateDelay();
-    return JSON.parse(localStorage.getItem('tracks') || '[]');
+    return this.transaction('tracks', 'readonly', store => store.getAll());
   }
 
   async uploadTrack(trackData: Omit<Track, 'id' | 'uploadedAt' | 'plays'>): Promise<Track> {
-    await this.simulateDelay();
-    const tracks: Track[] = JSON.parse(localStorage.getItem('tracks') || '[]');
-    
     const newTrack: Track = {
       ...trackData,
       id: `track-${Date.now()}`,
@@ -105,112 +167,133 @@ class LocalDB {
       plays: 0
     };
 
-    tracks.unshift(newTrack);
-    localStorage.setItem('tracks', JSON.stringify(tracks));
+    await this.transaction('tracks', 'readwrite', store => store.add(newTrack));
 
     // Update user track count
-    const users: any[] = JSON.parse(localStorage.getItem('users') || '[]');
-    const userIndex = users.findIndex(u => u.id === trackData.uploaderId);
-    if (userIndex !== -1) {
-      users[userIndex].trackCount = (users[userIndex].trackCount || 0) + 1;
-      localStorage.setItem('users', JSON.stringify(users));
+    const user = await this.getUser(trackData.uploaderId);
+    if (user) {
+      const updatedUser = { ...user, trackCount: (user.trackCount || 0) + 1 };
+      // We need the password to save it back, but we don't have it here. 
+      // In a real app, we wouldn't store password in the same object or we'd handle this differently.
+      // For this local demo, we'll fetch the full user object including password to update it.
+      
+      const db = await this.getDB();
+      const fullUser = await new Promise<any>((resolve) => {
+        db.transaction('users', 'readonly').objectStore('users').get(trackData.uploaderId).onsuccess = (e: any) => resolve(e.target.result);
+      });
+      
+      if (fullUser) {
+        fullUser.trackCount = (fullUser.trackCount || 0) + 1;
+        await this.transaction('users', 'readwrite', store => store.put(fullUser));
+      }
     }
 
     return newTrack;
   }
 
   async incrementPlayCount(trackId: string) {
-    const tracks: Track[] = JSON.parse(localStorage.getItem('tracks') || '[]');
-    const trackIndex = tracks.findIndex(t => t.id === trackId);
-    if (trackIndex !== -1) {
-      tracks[trackIndex].plays = (tracks[trackIndex].plays || 0) + 1;
-      localStorage.setItem('tracks', JSON.stringify(tracks));
-    }
+    const db = await this.getDB();
+    const transaction = db.transaction('tracks', 'readwrite');
+    const store = transaction.objectStore('tracks');
+    
+    const request = store.get(trackId);
+    request.onsuccess = () => {
+      const track = request.result;
+      if (track) {
+        track.plays = (track.plays || 0) + 1;
+        store.put(track);
+      }
+    };
   }
 
   // Playlists
   async getPlaylists(): Promise<Playlist[]> {
-    await this.simulateDelay();
-    return JSON.parse(localStorage.getItem('playlists') || '[]');
+    return this.transaction('playlists', 'readonly', store => store.getAll());
   }
 
   async createPlaylist(playlistData: Omit<Playlist, 'id' | 'createdAt'>): Promise<Playlist> {
-    await this.simulateDelay();
-    const playlists: Playlist[] = JSON.parse(localStorage.getItem('playlists') || '[]');
-    
     const newPlaylist: Playlist = {
       ...playlistData,
       id: `playlist-${Date.now()}`,
       createdAt: new Date().toISOString()
     };
-
-    playlists.unshift(newPlaylist);
-    localStorage.setItem('playlists', JSON.stringify(playlists));
+    await this.transaction('playlists', 'readwrite', store => store.add(newPlaylist));
     return newPlaylist;
   }
 
   async deletePlaylist(id: string) {
-    await this.simulateDelay();
-    let playlists: Playlist[] = JSON.parse(localStorage.getItem('playlists') || '[]');
-    playlists = playlists.filter(p => p.id !== id);
-    localStorage.setItem('playlists', JSON.stringify(playlists));
+    await this.transaction('playlists', 'readwrite', store => store.delete(id));
   }
 
   async addTrackToPlaylist(playlistId: string, trackId: string) {
-    await this.simulateDelay();
-    const playlists: Playlist[] = JSON.parse(localStorage.getItem('playlists') || '[]');
-    const playlistIndex = playlists.findIndex(p => p.id === playlistId);
+    const db = await this.getDB();
+    const transaction = db.transaction('playlists', 'readwrite');
+    const store = transaction.objectStore('playlists');
     
-    if (playlistIndex !== -1) {
-      if (!playlists[playlistIndex].tracks.includes(trackId)) {
-        playlists[playlistIndex].tracks.push(trackId);
-        localStorage.setItem('playlists', JSON.stringify(playlists));
+    store.get(playlistId).onsuccess = (e: any) => {
+      const playlist = e.target.result as Playlist;
+      if (playlist && !playlist.tracks.includes(trackId)) {
+        playlist.tracks.push(trackId);
+        store.put(playlist);
       }
-    }
+    };
   }
 
   async removeTrackFromPlaylist(playlistId: string, trackId: string) {
-    await this.simulateDelay();
-    const playlists: Playlist[] = JSON.parse(localStorage.getItem('playlists') || '[]');
-    const playlistIndex = playlists.findIndex(p => p.id === playlistId);
+    const db = await this.getDB();
+    const transaction = db.transaction('playlists', 'readwrite');
+    const store = transaction.objectStore('playlists');
     
-    if (playlistIndex !== -1) {
-      playlists[playlistIndex].tracks = playlists[playlistIndex].tracks.filter(id => id !== trackId);
-      localStorage.setItem('playlists', JSON.stringify(playlists));
-    }
+    store.get(playlistId).onsuccess = (e: any) => {
+      const playlist = e.target.result as Playlist;
+      if (playlist) {
+        playlist.tracks = playlist.tracks.filter(id => id !== trackId);
+        store.put(playlist);
+      }
+    };
   }
 
   // User Stats & Likes
   async toggleLike(userId: string, trackId: string) {
-    await this.simulateDelay();
-    const users: any[] = JSON.parse(localStorage.getItem('users') || '[]');
-    const userIndex = users.findIndex(u => u.id === userId);
+    const db = await this.getDB();
+    const transaction = db.transaction('users', 'readwrite');
+    const store = transaction.objectStore('users');
     
-    if (userIndex !== -1) {
-      const likes = users[userIndex].likes || [];
-      if (likes.includes(trackId)) {
-        users[userIndex].likes = likes.filter((id: string) => id !== trackId);
-      } else {
-        users[userIndex].likes.push(trackId);
-      }
-      localStorage.setItem('users', JSON.stringify(users));
-      return users[userIndex];
-    }
+    return new Promise((resolve) => {
+      store.get(userId).onsuccess = (e: any) => {
+        const user = e.target.result;
+        if (user) {
+          const likes = user.likes || [];
+          if (likes.includes(trackId)) {
+            user.likes = likes.filter((id: string) => id !== trackId);
+          } else {
+            user.likes.push(trackId);
+          }
+          store.put(user);
+          const { password: _, ...userData } = user;
+          resolve(userData);
+        }
+      };
+    });
   }
 
   async updateUserStats(userId: string, stats: { tracksPlayed?: number, minutesListened?: number }) {
-    const users: any[] = JSON.parse(localStorage.getItem('users') || '[]');
-    const userIndex = users.findIndex(u => u.id === userId);
+    const db = await this.getDB();
+    const transaction = db.transaction('users', 'readwrite');
+    const store = transaction.objectStore('users');
     
-    if (userIndex !== -1) {
-      if (stats.tracksPlayed) {
-        users[userIndex].tracksPlayed = (users[userIndex].tracksPlayed || 0) + stats.tracksPlayed;
+    store.get(userId).onsuccess = (e: any) => {
+      const user = e.target.result;
+      if (user) {
+        if (stats.tracksPlayed) {
+          user.tracksPlayed = (user.tracksPlayed || 0) + stats.tracksPlayed;
+        }
+        if (stats.minutesListened) {
+          user.minutesListened = (user.minutesListened || 0) + stats.minutesListened;
+        }
+        store.put(user);
       }
-      if (stats.minutesListened) {
-        users[userIndex].minutesListened = (users[userIndex].minutesListened || 0) + stats.minutesListened;
-      }
-      localStorage.setItem('users', JSON.stringify(users));
-    }
+    };
   }
 }
 
