@@ -67,7 +67,7 @@ export default function Studio() {
 
   // Upload Handlers
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+    const files = Array.from(e.target.files || []) as File[];
     if (files.length === 0) return;
     
     const newTracks = files.map(file => ({
