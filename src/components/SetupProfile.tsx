@@ -1,42 +1,44 @@
-import React, { useState } from 'react';
-import { Music, ArrowRight, Loader2 } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Music, ArrowRight, Loader2, Camera, Upload } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { motion } from 'motion/react';
 
 export default function SetupProfile() {
-  const { login } = useAppContext();
-  const [username, setUsername] = useState('');
+  const { user, login, refreshUser } = useAppContext();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setAvatarFile(file);
+      setPreviewUrl(URL.createObjectURL(file));
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim()) return;
+    if (!user || !avatarFile) return;
 
     setLoading(true);
-    setError('');
 
     try {
-      const userStr = localStorage.getItem('user');
-      if (!userStr) throw new Error('User not found');
-      const currentUser = JSON.parse(userStr);
+      const formData = new FormData();
+      formData.append('avatar', avatarFile);
 
-      const res = await fetch('/api/users/setup-username', {
+      const res = await fetch(`/api/users/${user.id}/profile`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ userId: currentUser.id, username })
+        body: formData
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Ошибка');
-
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      login(data.user);
-    } catch (err: any) {
-      setError(err.message);
+      if (res.ok) {
+        await refreshUser();
+        // The App component will automatically switch view based on user state
+      }
+    } catch (err) {
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -52,57 +54,70 @@ export default function SetupProfile() {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 relative z-10 shadow-2xl"
+        className="w-full max-w-md bg-[#121212] border border-white/10 rounded-3xl p-8 relative z-10 shadow-2xl"
       >
-        <div className="flex justify-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-500/20">
-            <Music className="w-8 h-8 text-white" />
-          </div>
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-black text-white mb-2 tracking-tight">
+            Оживите свой профиль
+          </h1>
+          <p className="text-neutral-400 font-medium">
+            Загрузите аватар, чтобы фанаты узнавали вас.
+          </p>
         </div>
 
-        <h1 className="text-3xl font-black text-white text-center mb-2 tracking-tight">
-          Придумайте никнейм
-        </h1>
-        <p className="text-neutral-400 text-center mb-8 font-medium">
-          Почти готово! Выберите уникальное имя для вашего профиля.
-        </p>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-bold text-neutral-300 mb-1.5 uppercase tracking-wider">Ваш никнейм</label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3.5 text-white focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all font-medium"
-              placeholder="e.g. cool_dj_99"
-              required
-              minLength={3}
-              maxLength={20}
-              pattern="^[a-zA-Z0-9_]+$"
-              title="Только латинские буквы, цифры и подчеркивания"
+        <form onSubmit={handleSubmit} className="space-y-8">
+          <div className="flex justify-center">
+            <div 
+              onClick={() => fileInputRef.current?.click()}
+              className="relative w-40 h-40 rounded-full bg-neutral-900 border-2 border-dashed border-neutral-700 flex items-center justify-center cursor-pointer hover:border-cyan-500 hover:bg-neutral-800 transition-all group overflow-hidden"
+            >
+              {previewUrl ? (
+                <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
+              ) : (
+                <div className="text-center p-4">
+                  <Camera className="w-8 h-8 text-neutral-500 mx-auto mb-2 group-hover:text-cyan-500 transition-colors" />
+                  <span className="text-xs text-neutral-500 font-bold uppercase tracking-wider group-hover:text-white transition-colors">Загрузить фото</span>
+                </div>
+              )}
+              
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <Upload className="w-8 h-8 text-white" />
+              </div>
+            </div>
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleFileSelect} 
+              accept="image/*" 
+              className="hidden" 
             />
           </div>
 
-          {error && (
-            <div className="text-red-400 text-sm text-center font-medium bg-red-500/10 py-2 rounded-lg border border-red-500/20">
-              {error}
-            </div>
-          )}
-
           <button
             type="submit"
-            disabled={loading || !username.trim()}
-            className="w-full bg-white text-black font-bold py-3.5 rounded-xl hover:bg-neutral-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed mt-6 shadow-lg shadow-white/10"
+            disabled={loading || !avatarFile}
+            className="w-full bg-white text-black font-bold py-4 rounded-xl hover:bg-neutral-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-white/10"
           >
             {loading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <>
-                <span>Продолжить</span>
+                <span>Готово</span>
                 <ArrowRight className="w-5 h-5" />
               </>
             )}
+          </button>
+          
+          <button 
+            type="button"
+            onClick={() => {
+              // Skip logic - maybe set a default avatar?
+              // For now just refresh to bypass if they really want to
+              refreshUser(); 
+            }}
+            className="w-full text-neutral-500 text-sm font-medium hover:text-white transition-colors"
+          >
+            Пропустить этот шаг
           </button>
         </form>
       </motion.div>

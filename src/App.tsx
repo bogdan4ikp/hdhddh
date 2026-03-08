@@ -23,7 +23,7 @@ function AppContent() {
     return <Auth />;
   }
 
-  if (user && !user.username) {
+  if (user && (!user.username || !user.avatar)) {
     return <SetupProfile />;
   }
 

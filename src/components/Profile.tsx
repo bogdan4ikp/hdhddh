@@ -19,6 +19,14 @@ export default function Profile() {
   const totalTracks = userTracks.length;
   const isVerified = totalTracks >= 3 && totalPlays >= 3000;
 
+  // Find latest track cover
+  const latestTrack = [...userTracks].sort((a, b) => {
+    const dateA = a.uploadedAt ? new Date(a.uploadedAt).getTime() : 0;
+    const dateB = b.uploadedAt ? new Date(b.uploadedAt).getTime() : 0;
+    return dateB - dateA;
+  })[0];
+  const latestTrackCover = latestTrack?.cover;
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'avatar' | 'cover') => {
     if (!e.target.files || !e.target.files[0]) return;
     
@@ -57,16 +65,21 @@ export default function Profile() {
   return (
     <div className="h-full overflow-y-auto pb-32">
       {/* Cover Image */}
-      <div className="relative h-64 md:h-80 w-full bg-neutral-800 group">
+      <div className="relative h-64 md:h-80 w-full bg-neutral-900 group overflow-hidden">
         {user.cover ? (
           <img src={user.cover} alt="Cover" className="w-full h-full object-cover" />
+        ) : latestTrackCover ? (
+          <div className="w-full h-full relative">
+            <img src={latestTrackCover} alt="Cover" className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-transparent to-black/30"></div>
+          </div>
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-emerald-900 via-cyan-900 to-[#121212]"></div>
+          <div className="w-full h-full bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-400"></div>
         )}
         
         <button 
           onClick={() => coverInputRef.current?.click()}
-          className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full backdrop-blur-md transition-all opacity-0 group-hover:opacity-100"
+          className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full backdrop-blur-md transition-all opacity-0 group-hover:opacity-100 z-20"
         >
           <Camera className="w-5 h-5" />
         </button>
@@ -78,27 +91,27 @@ export default function Profile() {
           accept="image/*"
         />
         
-        <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/50 to-transparent"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/20 to-transparent pointer-events-none"></div>
       </div>
 
-      <div className="px-6 md:px-8 -mt-20 relative z-10">
-        <div className="flex flex-col md:flex-row items-start md:items-end gap-6">
+      <div className="px-6 md:px-8 -mt-24 relative z-10 pb-12">
+        <div className="flex flex-col items-center text-center">
           {/* Avatar */}
-          <div className="relative group">
-            <div className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-[#121212] overflow-hidden bg-neutral-800 shadow-2xl">
+          <div className="relative group mb-6">
+            <div className="w-40 h-40 md:w-48 md:h-48 rounded-full border-4 border-[#121212] overflow-hidden bg-neutral-900 shadow-2xl relative z-10">
               {user.avatar ? (
                 <img src={user.avatar} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-emerald-500 to-cyan-600 text-4xl font-bold text-white">
+                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-emerald-500 to-cyan-600 text-5xl font-bold text-white">
                   {user.username[0].toUpperCase()}
                 </div>
               )}
             </div>
             <button 
               onClick={() => avatarInputRef.current?.click()}
-              className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+              className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-20"
             >
-              <Camera className="w-8 h-8 text-white" />
+              <Camera className="w-10 h-10 text-white" />
             </button>
             <input 
               type="file" 
@@ -107,41 +120,54 @@ export default function Profile() {
               className="hidden" 
               accept="image/*"
             />
+            {/* Verification Badge */}
+            {isVerified && (
+              <div className="absolute bottom-2 right-2 z-30 bg-black rounded-full p-1 border-2 border-[#121212]">
+                <CheckCircle2 className="w-8 h-8 text-[#1DB954] fill-current" />
+              </div>
+            )}
           </div>
 
           {/* Info */}
-          <div className="flex-1 mb-2">
-            <div className="flex items-center gap-3 mb-1">
-              <h1 className="text-3xl md:text-4xl font-bold text-white">{user.username}</h1>
-              <button 
-                onClick={() => setShowBadgeModal(true)}
-                className="focus:outline-none"
-                title="Статус артиста"
-              >
-                <CheckCircle2 className={`w-6 h-6 md:w-8 md:h-8 transition-colors ${isVerified ? 'text-[#1DB954]' : 'text-neutral-600 hover:text-neutral-400'}`} />
-              </button>
-            </div>
-            <div className="flex items-center gap-4 text-neutral-400 text-sm">
-              <span>{totalTracks} треков</span>
-              <span>•</span>
-              <span>{totalPlays.toLocaleString()} прослушиваний</span>
+          <div className="mb-8 max-w-2xl w-full">
+            <h1 className="text-4xl md:text-5xl font-black text-white mb-2 tracking-tight">{user.username}</h1>
+            
+            {/* Stats Bar */}
+            <div className="flex items-center justify-center gap-8 mt-6 p-4 bg-white/5 backdrop-blur-md rounded-2xl border border-white/5 inline-flex">
+              <div className="text-center px-4">
+                <div className="text-2xl font-bold text-white">{totalTracks}</div>
+                <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Треков</div>
+              </div>
+              <div className="w-px h-8 bg-white/10"></div>
+              <div className="text-center px-4">
+                <div className="text-2xl font-bold text-white">{totalPlays.toLocaleString()}</div>
+                <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Прослушиваний</div>
+              </div>
             </div>
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3 w-full md:w-auto mt-4 md:mt-0">
+          <div className="flex items-center gap-4 mb-12">
             <button 
               onClick={() => setView('studio')}
-              className={`flex-1 md:flex-none ${theme === 'light' ? 'bg-black text-white hover:bg-neutral-800' : 'bg-white text-black hover:bg-neutral-200'} px-6 py-3 rounded-full font-bold transition-colors flex items-center justify-center gap-2`}
+              className="bg-white text-black hover:bg-neutral-200 px-8 py-3 rounded-full font-bold transition-all flex items-center gap-2 shadow-lg shadow-white/10 hover:scale-105 active:scale-95"
             >
               <Mic2 className="w-4 h-4" />
               Студия
             </button>
             <button 
               onClick={logout}
-              className={`p-3 border ${theme === 'light' ? 'border-black/10 text-black hover:bg-black/5' : 'border-white/20 text-white hover:bg-white/10'} rounded-full transition-colors`}
+              className="p-3 bg-white/5 hover:bg-white/10 text-white rounded-full transition-all border border-white/5 hover:border-white/20"
+              title="Выйти"
             >
               <LogOut className="w-5 h-5" />
+            </button>
+            <button 
+              onClick={() => setShowBadgeModal(true)}
+              className={`p-3 rounded-full transition-all border ${isVerified ? 'bg-[#1DB954]/10 text-[#1DB954] border-[#1DB954]/20' : 'bg-white/5 text-neutral-400 border-white/5 hover:text-white'}`}
+              title="Статус"
+            >
+              <CheckCircle2 className="w-5 h-5" />
             </button>
           </div>
         </div>

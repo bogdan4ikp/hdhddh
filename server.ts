@@ -34,8 +34,19 @@ function verifyPassword(password, salt, hash) {
 let pool;
 
 async function initDb() {
-  const connectionString = process.env.DATABASE_URL || "postgresql://postgres:Bogdan4ik01082011@db.hkgukzvwhffyctcdmcnt.supabase.co:5432/postgres";
+  let connectionString = process.env.DATABASE_URL || "postgresql://postgres:Bogdan4ik01082011@db.hkgukzvwhffyctcdmcnt.supabase.co:5432/postgres";
   
+  if (connectionString === 'base' || !connectionString.startsWith('postgres')) {
+    connectionString = "postgresql://postgres:Bogdan4ik01082011@db.hkgukzvwhffyctcdmcnt.supabase.co:5432/postgres";
+  }
+
+  try {
+    const url = new URL(connectionString);
+    console.log('DB Hostname:', url.hostname);
+    // Override removed to allow direct connection
+  } catch (e) {}
+
+  /*
   if (connectionString.includes('db.hkgukzvwhffyctcdmcnt.supabase.co') && connectionString.includes('5432')) {
     console.error('\n================================================================');
     console.error('❌ DATABASE CONNECTION ERROR (IPv6 NOT SUPPORTED):');
@@ -46,6 +57,7 @@ async function initDb() {
     console.error('Set it as the DATABASE_URL environment variable.');
     console.error('================================================================\n');
   }
+  */
 
   pool = new Pool({
     connectionString,
@@ -93,6 +105,11 @@ async function initDb() {
         "isPublic" INTEGER DEFAULT 1
       );
     `);
+    try { await pool.query(`ALTER TABLE tracks ADD COLUMN lyrics TEXT`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE tracks ADD COLUMN "isExplicit" INTEGER DEFAULT 0`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE tracks ADD COLUMN genre TEXT`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE tracks ADD COLUMN album TEXT`); } catch (e) {}
+    try { await pool.query(`ALTER TABLE tracks ADD COLUMN "isPublic" INTEGER DEFAULT 1`); } catch (e) {}
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS playlists (
@@ -107,6 +124,18 @@ async function initDb() {
         "createdAt" TEXT
       );
     `);
+
+    // Log schema for debugging
+    try {
+      const { rows } = await pool.query(`
+        SELECT column_name, data_type 
+        FROM information_schema.columns 
+        WHERE table_name = 'tracks'
+      `);
+      console.log('Tracks table schema:', rows);
+    } catch (e) {
+      console.error('Failed to fetch schema:', e);
+    }
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS comments (
@@ -150,7 +179,7 @@ async function initDb() {
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 // Serve uploaded files
 app.use('/uploads', express.static(uploadsDir));
@@ -178,8 +207,8 @@ app.post('/api/auth/register', async (req, res) => {
       email: '',
       hash,
       salt,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
-      cover: `https://picsum.photos/seed/${username}/800/200`,
+      avatar: null, // Allow user to set this up
+      cover: null,  // Allow user to set this up
       createdAt: new Date().toISOString()
     };
 
@@ -198,81 +227,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-app.get('/api/auth/google/url', (req, res) => {
-  const origin = req.query.origin || req.headers.origin;
-  const redirectUri = `${origin}/auth/callback`;
-  const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID || '',
-    redirect_uri: redirectUri,
-    response_type: 'code',
-    scope: 'email profile',
-    state: origin as string
-  });
-  res.json({ url: `https://accounts.google.com/o/oauth2/v2/auth?${params}` });
-});
-
-app.get('/auth/callback', async (req, res) => {
-  const { code, state: origin } = req.query;
-  const redirectUri = `${origin}/auth/callback`;
-
-  try {
-    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: process.env.GOOGLE_CLIENT_ID || '',
-        client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
-        code: code as string,
-        grant_type: 'authorization_code',
-        redirect_uri: redirectUri
-      })
-    });
-    const tokenData = await tokenRes.json();
-
-    if (!tokenData.access_token) throw new Error('No access token');
-
-    const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` }
-    });
-    const userData = await userRes.json();
-
-    let { rows } = await pool.query('SELECT * FROM users WHERE "googleId" = $1 OR email = $2', [userData.id, userData.email]);
-    let user = rows[0];
-
-    if (!user) {
-      const id = `user-${Date.now()}`;
-      await pool.query(
-        `INSERT INTO users (id, email, "googleId", avatar, "createdAt") VALUES ($1, $2, $3, $4, $5)`,
-        [id, userData.email, userData.id, userData.picture, new Date().toISOString()]
-      );
-      const { rows: newRows } = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
-      user = newRows[0];
-    } else if (!user.googleId) {
-      await pool.query('UPDATE users SET "googleId" = $1, avatar = COALESCE(avatar, $2) WHERE id = $3', [userData.id, userData.picture, user.id]);
-      user.googleId = userData.id;
-    }
-
-    const { hash, salt, ...safeUser } = user;
-
-    res.send(`
-      <html>
-        <body>
-          <script>
-            if (window.opener) {
-              window.opener.postMessage({ type: 'OAUTH_SUCCESS', token: 'google-oauth', user: ${JSON.stringify(safeUser)} }, '*');
-              window.close();
-            } else {
-              window.location.href = '/';
-            }
-          </script>
-          <p>Authentication successful. You can close this window.</p>
-        </body>
-      </html>
-    `);
-  } catch (e) {
-    res.send(`<p>Authentication failed: ${e.message}</p>`);
-  }
-});
+// Google OAuth removed
 
 app.post('/api/users/setup-username', async (req, res) => {
   try {
@@ -334,10 +289,10 @@ app.patch('/api/users/:id', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     if (tracksPlayed) {
-      await pool.query('UPDATE users SET "tracksPlayed" = "tracksPlayed" + $1 WHERE id = $2', [tracksPlayed, req.params.id]);
+      await pool.query('UPDATE users SET "tracksPlayed" = COALESCE("tracksPlayed", 0) + $1 WHERE id = $2', [Number(tracksPlayed), req.params.id]);
     }
     if (minutesListened) {
-      await pool.query('UPDATE users SET "minutesListened" = "minutesListened" + $1 WHERE id = $2', [minutesListened, req.params.id]);
+      await pool.query('UPDATE users SET "minutesListened" = COALESCE("minutesListened", 0) + $1 WHERE id = $2', [Number(minutesListened), req.params.id]);
     }
 
     res.json({ success: true });
@@ -366,6 +321,7 @@ app.get('/api/tracks', async (req, res) => {
 app.post('/api/tracks', async (req, res) => {
   try {
     const track = req.body;
+    console.log('Creating track:', { ...track, lyrics: track.lyrics ? track.lyrics.substring(0, 50) + '...' : 'none' });
     const id = `track-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
     
     const audioSrc = track.audioSrc || track.url;
@@ -475,6 +431,19 @@ app.get('/api/users/:id/followers', async (req, res) => {
       WHERE f."followingId" = $1
     `, [req.params.id]);
     res.json(followers);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/debug/schema', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT column_name, data_type 
+      FROM information_schema.columns 
+      WHERE table_name = 'tracks'
+    `);
+    res.json(rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

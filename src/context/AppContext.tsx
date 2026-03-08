@@ -357,7 +357,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         refreshTracks();
         
         if (userRef.current) {
-          await api.updateUserStats(userRef.current.id, { tracksPlayed: 1, minutesListened: 3 });
+          const duration = audioRef.current?.duration;
+          const minutes = (duration && isFinite(duration)) ? Math.ceil(duration / 60) : 0;
+          await api.updateUserStats(userRef.current.id, { tracksPlayed: 1, minutesListened: minutes });
           refreshUser();
         }
       } catch (e) {
